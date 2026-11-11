@@ -85,7 +85,7 @@ Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
 
 Real YouTube Live sales, read on 11 November 2026 through Dibs' YouTube reader (public chat, read-only, no names kept):
 
-- Three sellers were live at the time: a fabric shop, a clothing shop and a cosmetics shop. One had pinned "contact WhatsApp to place your order" in its chat, which is the manual process Dibs replaces.
+- Three live sales were running, including a fabric shop. Another seller had pinned "contact WhatsApp to place your order" in its chat, which is the manual process Dibs replaces.
 - In 40 consecutive messages from the fabric sale, buyers wrote in Hinglish: "hold rkh do booking meri confrm h" (keep it for me, I'm booking it), "kya rate h" (what's the price), "khadi me double bed ki dikha dijiye" (show me the double bed one in khadi). Three were claims and ten were questions, three of them about price.
 - Keyword rules alone first caught 3 claims and 2 questions. Gemini caught 8 questions, and those lines became new test cases for the rules, which now agree with Gemini on 32 of the 40.
 - Price questions were common enough that Dibs now answers them from the listing, in the buyer's language.
