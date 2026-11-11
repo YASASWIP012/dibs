@@ -43,53 +43,57 @@ Clear claims are decided by plain rules, in the order the server heard them.
 Gemini reads the messy ones, and answers each buyer in their own language.
 
 12
-00:01:11,400 --> 00:01:15,880
-Whoever was first gets a PayPal checkout on their phone, and a clock.
+00:01:08,400 --> 00:01:16,720
+Already live on YouTube? Paste the link. Dibs reads that chat too, holds the item, and answers price questions while you keep talking.
 
 13
-00:01:16,400 --> 00:01:24,240
-Jake doesn't pay. When his time runs out, the jacket moves to the next person in line, and Lucia hears about it in Spanish.
+00:01:21,400 --> 00:01:25,880
+Whoever was first gets a PayPal checkout on their phone, and a clock.
 
 14
-00:01:24,600 --> 00:01:27,920
-If Jake tries to pay late, Dibs refuses the capture.
+00:01:26,400 --> 00:01:34,240
+Jake doesn't pay. When his time runs out, the jacket moves to the next person in line, and Lucia hears about it in Spanish.
 
 15
-00:01:27,920 --> 00:01:31,240
-Nobody pays for something that went to someone else.
+00:01:34,600 --> 00:01:37,920
+If Jake tries to pay late, Dibs refuses the capture.
 
 16
-00:01:36,400 --> 00:01:42,480
-Everything a buyer holds goes into one PayPal order, built with the PayPal server SDK.
+00:01:37,920 --> 00:01:41,240
+Nobody pays for something that went to someone else.
 
 17
-00:01:43,000 --> 00:01:49,320
-Lucia pays. PayPal captures it, the webhook signature checks out, and the board turns green.
+00:01:46,400 --> 00:01:52,480
+Everything a buyer holds goes into one PayPal order, built with the PayPal server SDK.
 
 18
-00:01:57,400 --> 00:02:01,131
-After the show, the seller just asks. Who hasn't paid?
+00:01:53,000 --> 00:01:59,320
+Lucia pays. PayPal captures it, the webhook signature checks out, and the board turns green.
 
 19
-00:02:01,131 --> 00:02:03,480
-Refund fifteen dollars on lot one.
+00:02:07,400 --> 00:02:11,131
+After the show, the seller just asks. Who hasn't paid?
 
 20
-00:02:03,800 --> 00:02:08,650
-The co-host proposes it, and nothing moves until the seller taps confirm.
+00:02:11,131 --> 00:02:13,480
+Refund fifteen dollars on lot one.
 
 21
-00:02:08,650 --> 00:02:11,640
-Then PayPal's agent toolkit sends the refund.
+00:02:13,800 --> 00:02:18,650
+The co-host proposes it, and nothing moves until the seller taps confirm.
 
 22
-00:02:13,400 --> 00:02:19,640
-All of this ran in the PayPal sandbox, with real orders, a real capture and a real refund.
+00:02:18,650 --> 00:02:21,640
+Then PayPal's agent toolkit sends the refund.
 
 23
-00:02:21,000 --> 00:02:25,560
-There's one link for the seller and one for buyers, and nothing to install.
+00:02:23,400 --> 00:02:29,640
+All of this ran in the PayPal sandbox, with real orders, a real capture and a real refund.
 
 24
-00:02:29,400 --> 00:02:33,400
+00:02:31,000 --> 00:02:35,560
+There's one link for the seller and one for buyers, and nothing to install.
+
+25
+00:02:39,400 --> 00:02:43,400
 Dibs. Sell it live, and get paid before the next item.
