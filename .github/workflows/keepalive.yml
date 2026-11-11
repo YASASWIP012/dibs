@@ -1,0 +1,11 @@
+# Free Render instances sleep after 15 idle minutes. Judges should never wait for a cold start.
+name: keepalive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS -m 90 https://dibs-1j5d.onrender.com/api/health
