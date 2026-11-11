@@ -16,8 +16,8 @@ export interface DemoLot {
 }
 
 export const DEMO_LOTS: DemoLot[] = [
-  { number: 1, title: "Denim trucker jacket", description: "Medium wash, size M, light fading on the cuffs.", priceCents: 4000, spoken: "Lot one, denim trucker jacket, size medium, forty bucks", photo: "/demo/lot-1.jpg" },
-  { number: 2, title: "Ceramic table lamp", description: "Glazed green base with a linen shade. Works.", priceCents: 2800, spoken: "Lot two, this green ceramic lamp, twenty eight", photo: "/demo/lot-2.jpg" },
+  { number: 1, title: "Denim trucker jacket", description: "Light wash, size M, a little fading at the cuffs.", priceCents: 4000, spoken: "Lot one, denim trucker jacket, size medium, forty bucks", photo: "/demo/lot-1.jpg" },
+  { number: 2, title: "Ceramic table lamp", description: "Glazed green base, pleated shade. Works.", priceCents: 2800, spoken: "Lot two, this green ceramic lamp, twenty eight", photo: "/demo/lot-2.jpg" },
   { number: 3, title: "Leather crossbody bag", description: "Brown leather, adjustable strap, a few scuffs on the base.", priceCents: 3500, spoken: "Lot three, brown leather crossbody, thirty five", photo: "/demo/lot-3.jpg" },
 ];
 
