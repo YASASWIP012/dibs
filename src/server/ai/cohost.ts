@@ -1,7 +1,7 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { GoogleGenAI, ThinkingLevel, type Content, type FunctionDeclaration, type Part } from "@google/genai";
 import { PayPalAgentToolkit } from "@paypal/agent-toolkit/ai-sdk";
-import { generateText, tool, type CoreMessage } from "ai";
-import { z } from "zod";
+import { z, type ZodTypeAny } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Show } from "../domain/show.js";
 
 export interface CohostStep {
@@ -15,19 +15,33 @@ export interface CohostAnswer {
   steps: CohostStep[];
 }
 
+interface LocalTool {
+  description: string;
+  parameters: ZodTypeAny;
+  execute: (args: unknown) => Promise<unknown>;
+}
+
+const SYSTEM = [
+  "You are the co-host for a small reseller running a live sale. Be brief: one to three short sentences, plain words, no markdown.",
+  "Always call show_status first. Money amounts are USD.",
+  "Only move money (refunds) or add tracking when the seller clearly asks for that exact thing in their latest message. Never refund more than the lot price.",
+  "A refund needs the capture id from show_status. Tracking needs the order id and capture id.",
+  "If something fails, say what failed in one sentence.",
+].join(" ");
+
 /**
  * The seller's co-host. Ask it things in plain words during or after the show
- * ("who hasn't paid?", "refund lot 3", "add tracking 9400... for maria"). It reads the show
- * through our own tool and acts on PayPal through the PayPal Agent Toolkit.
+ * ("who hasn't paid?", "refund lot 3"). It reads the show through our own tool and acts on
+ * PayPal through the PayPal Agent Toolkit's tools, driven by a Gemini function-calling loop.
+ * The loop passes the model's own content back each turn, so newer Gemini models keep their
+ * thought signatures across tool calls.
  */
 export class Cohost {
-  private readonly toolkit: PayPalAgentToolkit;
-  private readonly google: ReturnType<typeof createGoogleGenerativeAI>;
+  private readonly paypalTools: Record<string, LocalTool>;
+  private readonly client: GoogleGenAI;
 
-  constructor(
-    private readonly opts: { clientId: string; clientSecret: string; geminiKey: string; model: string },
-  ) {
-    this.toolkit = new PayPalAgentToolkit({
+  constructor(private readonly opts: { clientId: string; clientSecret: string; geminiKey: string; model: string }) {
+    const toolkit = new PayPalAgentToolkit({
       clientId: opts.clientId,
       clientSecret: opts.clientSecret,
       configuration: {
@@ -40,12 +54,12 @@ export class Cohost {
         context: { sandbox: true },
       },
     });
-    this.google = createGoogleGenerativeAI({ apiKey: opts.geminiKey });
+    this.paypalTools = toolkit.getTools() as unknown as Record<string, LocalTool>;
+    this.client = new GoogleGenAI({ apiKey: opts.geminiKey, apiVersion: "v1beta" });
   }
 
-  async ask(show: Show, question: string, history: CoreMessage[] = []): Promise<CohostAnswer> {
-    const steps: CohostStep[] = [];
-    const showStatus = tool({
+  private showTool(show: Show): LocalTool {
+    return {
       description:
         "Current state of this live show: every lot with its price and status, who holds or paid for it, who is waiting, PayPal order ids and capture ids. Call this before answering anything about the show or before acting on a payment.",
       parameters: z.object({}),
@@ -68,29 +82,56 @@ export class Cohost {
           recap: snap.recap,
         };
       },
+    };
+  }
+
+  async ask(show: Show, question: string): Promise<CohostAnswer> {
+    const tools: Record<string, LocalTool> = { show_status: this.showTool(show), ...this.paypalTools };
+    const declarations: FunctionDeclaration[] = Object.entries(tools).map(([name, t]) => {
+      const schema = zodToJsonSchema(t.parameters, { target: "openApi3", $refStrategy: "none" }) as Record<string, unknown>;
+      delete schema.$schema;
+      return { name, description: t.description.slice(0, 1000), parametersJsonSchema: schema };
     });
 
-    const paypalTools = this.toolkit.getTools();
-    const res = await generateText({
-      model: this.google(this.opts.model),
-      system: [
-        "You are the co-host for a small reseller running a live sale. Be brief: one to three short sentences, plain words, no markdown headings.",
-        "Always call show_status first. Money amounts are USD.",
-        "Only move money (refunds) or add tracking when the seller clearly asks for that exact thing in their latest message. Never refund more than the lot price.",
-        "A refund needs the capture id from show_status. Tracking needs the order id and capture id.",
-        "If something fails, say what failed in one sentence.",
-      ].join(" "),
-      messages: [...history.slice(-8), { role: "user", content: question }],
-      tools: { show_status: showStatus, ...paypalTools },
-      maxSteps: 6,
-      temperature: 0.1,
-      onStepFinish: (step) => {
-        for (const call of step.toolCalls) {
-          const result = step.toolResults.find((r) => r.toolCallId === call.toolCallId);
-          steps.push({ tool: call.toolName, args: call.args, ok: result !== undefined && !/error/i.test(JSON.stringify(result.result ?? "")) });
+    const contents: Content[] = [{ role: "user", parts: [{ text: question }] }];
+    const steps: CohostStep[] = [];
+
+    for (let turn = 0; turn < 6; turn++) {
+      const res = await this.client.models.generateContent({
+        model: this.opts.model,
+        contents,
+        config: {
+          systemInstruction: SYSTEM,
+          tools: [{ functionDeclarations: declarations }],
+          temperature: 0.1,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        },
+      });
+      const content = res.candidates?.[0]?.content;
+      const calls = res.functionCalls ?? [];
+      if (!content || calls.length === 0) return { text: res.text?.trim() || "Done.", steps };
+
+      // keep the model's turn exactly as returned (thought signatures included)
+      contents.push(content);
+      const responses: Part[] = [];
+      for (const call of calls) {
+        const name = call.name ?? "";
+        const tool = tools[name];
+        let result: unknown;
+        let ok = false;
+        try {
+          if (!tool) throw new Error(`Unknown tool ${name}`);
+          const args = tool.parameters.parse(call.args ?? {});
+          result = await tool.execute(args);
+          ok = !(typeof result === "string" && /error|failed/i.test(result));
+        } catch (err) {
+          result = { error: (err as Error).message.slice(0, 300) };
         }
-      },
-    });
-    return { text: res.text.trim() || "Done.", steps };
+        steps.push({ tool: name, args: call.args, ok });
+        responses.push({ functionResponse: { id: call.id, name, response: { result } } });
+      }
+      contents.push({ role: "user", parts: responses });
+    }
+    return { text: "I ran out of steps on that one. Try asking it a simpler way.", steps };
   }
 }
