@@ -74,6 +74,7 @@ export class Cohost {
   private readonly createRefund: LocalTool;
   private readonly client: GoogleGenAI;
   private readonly proposals = new Map<string, { showId: string; p: Proposal; at: number }>();
+  private readonly running = new Set<string>();
 
   constructor(private readonly opts: { clientId: string; clientSecret: string; geminiKey: string; model: string }) {
     const toolkit = new PayPalAgentToolkit({
@@ -256,21 +257,46 @@ export class Cohost {
   async confirm(
     show: Show,
     id: string,
-    act: { release: (lot: number) => void; remind: (buyerId: string, lot: number) => Promise<void>; relist?: (lot: number, priceCents: number) => void; track?: (orderId: string, captureId: string, trackingNumber: string, carrier: string) => Promise<string | undefined> },
+    act: {
+      release: (lot: number) => void;
+      remind: (buyerId: string, lot: number) => Promise<void>;
+      relist?: (lot: number, priceCents: number) => void;
+      track?: (orderId: string, captureId: string, trackingNumber: string, carrier: string) => Promise<string | undefined>;
+      /** Idempotent refund (the request id is derived from the proposal). Falls back to the Agent Toolkit. */
+      refund?: (captureId: string, cents: number, requestId: string, note: string) => Promise<{ id?: string; status?: string }>;
+    },
   ): Promise<{ ok: boolean; text: string; refundId?: string }> {
     const entry = this.proposals.get(id);
     if (!entry || entry.showId !== show.id) return { ok: false, text: "That proposal has expired." };
-    this.proposals.delete(id);
+    if (this.running.has(id)) return { ok: false, text: "That's already going through." };
     const p = entry.p;
     if (p.kind === "refund") {
       const c = checkRefund(show, p.lot, p.amountCents);
-      if (!c.ok) return { ok: false, text: c.reason };
-      const raw = await this.createRefund.execute({ capture_id: c.captureId, amount: { value: (p.amountCents / 100).toFixed(2), currency_code: "USD" }, note_to_payer: `Refund for lot ${p.lot}` });
-      const res = (typeof raw === "string" ? JSON.parse(raw) : raw) as { id?: string; status?: string; error?: unknown };
-      if (!res?.id) return { ok: false, text: "PayPal didn't accept the refund." };
-      show.recordRefund(c.captureId, p.amountCents, res.id, p.lot);
-      return { ok: true, text: `Refunded ${fmt(p.amountCents)} to @${p.handle} (${res.status ?? "sent"}).`, refundId: res.id };
+      if (!c.ok) {
+        this.proposals.delete(id);
+        return { ok: false, text: c.reason };
+      }
+      this.running.add(id);
+      try {
+        const note = `Refund for lot ${p.lot}`;
+        let res: { id?: string; status?: string };
+        if (act.refund) res = await act.refund(c.captureId, p.amountCents, `refund-${p.id}`, note);
+        else {
+          const raw = await this.createRefund.execute({ capture_id: c.captureId, amount: { value: (p.amountCents / 100).toFixed(2), currency_code: "USD" }, note_to_payer: note });
+          res = (typeof raw === "string" ? JSON.parse(raw) : raw) as { id?: string; status?: string };
+        }
+        if (!res?.id) return { ok: false, text: "PayPal didn't accept the refund." };
+        show.recordRefund(c.captureId, p.amountCents, res.id, p.lot);
+        this.proposals.delete(id);
+        return { ok: true, text: `Refunded ${fmt(p.amountCents)} to @${p.handle} (${res.status ?? "sent"}).`, refundId: res.id };
+      } catch (err) {
+        // the outcome is unknown: keep the proposal, so Confirm again repeats the same request id
+        return { ok: false, text: `PayPal didn't answer (${(err as Error).message.slice(0, 80)}). Press Confirm again; it won't refund twice.` };
+      } finally {
+        this.running.delete(id);
+      }
     }
+    this.proposals.delete(id);
     if (p.kind === "release") {
       act.release(p.lot);
       return { ok: true, text: `Lot ${p.lot} moved on from @${p.handle}.` };

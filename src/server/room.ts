@@ -11,7 +11,8 @@ import type { OrderLine } from "./paypal/paypal.js";
 /** The slice of PayPal a room needs. The real one is paypal/paypal.ts; tests pass a fake. */
 export interface Payments {
   createOrder(showId: string, buyerHandle: string, lines: OrderLine[], requestId: string, payeeEmail?: string): Promise<{ id: string; status?: string }>;
-  captureOrder(orderId: string): Promise<{ status?: string; captureId?: string; captureStatus?: string }>;
+  captureOrder(orderId: string, attempt?: number): Promise<{ status?: string; captureId?: string; captureStatus?: string }>;
+  refundCapture?(captureId: string, cents: number, requestId: string, note: string): Promise<{ id?: string; status?: string }>;
   getOrder?(orderId: string): Promise<{ status?: string; captureId?: string; captureStatus?: string }>;
   addTracking?(orderId: string, captureId: string, trackingNumber: string, carrier?: string): Promise<string | undefined>;
 }
@@ -45,6 +46,8 @@ export class Room {
   private youtube?: YouTubeChat;
   youtubeStatus: { videoId?: string; state: "off" | "connecting" | "live" | "error"; error?: string } = { state: "off" };
   readonly suggestions: Proposal[] = [];
+  /** The seller lets the co-host send reminders by itself. Money still waits for Confirm. */
+  autoRemind = false;
   private readonly peers = new Set<Peer>();
   private latestFrame?: Buffer;
   /** One queue for the whole show: claims land in the order the server received them. */
@@ -202,7 +205,12 @@ export class Room {
   private suggest(p: Proposal) {
     this.suggestions.push(p);
     if (this.suggestions.length > 30) this.suggestions.shift();
-    const msg = JSON.stringify({ type: "cohost.proposal", proposal: { id: p.id, kind: p.kind, label: p.label } });
+    this.announce({ id: p.id, kind: p.kind, label: p.label });
+  }
+
+  /** Tells the seller (and judge-mode watchers) what the co-host suggested or already did. */
+  private announce(item: { id: string; kind: string; label: string; done?: boolean }) {
+    const msg = JSON.stringify({ type: "cohost.proposal", proposal: item });
     for (const peer of this.peers) if (peer.role !== "buyer" && peer.socket.readyState === 1) peer.socket.send(msg);
   }
 
@@ -215,7 +223,14 @@ export class Room {
         const left = c.deadline - now;
         if (left > 0 && left <= Math.min(30_000, this.show.holdMs / 3)) {
           this.nudged.add(c.id);
-          this.suggest(this.cohost.suggest(this.show, { kind: "remind", lot: c.lotNumber, handle: c.handle, buyerId: c.buyerId }));
+          const buyer = this.show.buyers.get(c.buyerId);
+          if (this.autoRemind && buyer) {
+            const secs = Math.ceil(left / 1000);
+            void this.reply(buyer, `@${buyer.handle} ${secs} seconds left to pay for lot ${c.lotNumber}, or it goes to the next person.`);
+            this.announce({ id: `auto-${c.id}`, kind: "remind", label: `Reminded @${c.handle} about lot ${c.lotNumber} (${secs}s left)`, done: true });
+          } else {
+            this.suggest(this.cohost.suggest(this.show, { kind: "remind", lot: c.lotNumber, handle: c.handle, buyerId: c.buyerId }));
+          }
         }
       }
     }
@@ -271,7 +286,7 @@ export class Room {
     if (order.status === "captured") return order;
     let res: { status?: string; captureId?: string; captureStatus?: string };
     try {
-      res = await this.paypal.captureOrder(orderId);
+      res = await this.paypal.captureOrder(orderId, order.captureAttempt ?? 0);
     } catch (err) {
       // A timeout or 5xx doesn't mean nothing happened. Ask PayPal before letting the clock
       // hand the lot on; if PayPal can't say either way, the hold stays locked until the

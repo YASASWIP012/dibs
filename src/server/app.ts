@@ -104,6 +104,14 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
     return { ...r.show.snapshot(), viewers: r.viewers };
   });
 
+  app.post("/api/shows/:id/settings", async (req) => {
+    const r = room((req.params as { id: string }).id);
+    requireSeller(r, req.headers["x-seller-key"]);
+    const { autoRemind } = z.object({ autoRemind: z.boolean() }).parse(req.body);
+    r.autoRemind = autoRemind;
+    return { autoRemind: r.autoRemind };
+  });
+
   app.get("/api/shows/:id/suggestions", async (req) => {
     const r = room((req.params as { id: string }).id);
     requireSeller(r, req.headers["x-seller-key"]);
@@ -224,6 +232,7 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
         r.tick();
       },
       track: async (orderId, captureId, trackingNumber, carrier) => deps.payments?.addTracking?.(orderId, captureId, trackingNumber, carrier),
+      refund: deps.payments?.refundCapture ? (captureId, cents, requestId, note) => deps.payments!.refundCapture!(captureId, cents, requestId, note) : undefined,
       relist: (lot, priceCents) => {
         const l = r.show.lots.get(lot);
         if (!l) return;
@@ -242,6 +251,7 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
   app.post("/api/demo", async () => {
     const r = new Room(40_000, deps.ai, deps.payments);
     r.cohost = deps.cohost;
+    r.autoRemind = true;
     r.demo = true;
     r.stopDemo = runDemo(r);
     rooms.set(r.show.id, r);
@@ -258,8 +268,6 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
     if (!verified) return reply.status(400).send({ ok: false, verified: false });
     // PayPal retries deliveries; each event changes state at most once
     if (seenEvents.has(event.id)) return { ok: true, verified, duplicate: true };
-    seenEvents.add(event.id);
-    if (seenEvents.size > 5000) seenEvents.delete(seenEvents.values().next().value!);
 
     const res = event.resource ?? {};
     const orderId = res.supplementary_data?.related_ids?.order_id ?? (event.event_type === "CHECKOUT.ORDER.APPROVED" ? res.id : undefined);
@@ -276,6 +284,9 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
       else if ((event.event_type === "PAYMENT.CAPTURE.REFUNDED" || event.event_type === "PAYMENT.CAPTURE.REVERSED") && order.captureId && res.id)
         r.show.recordRefund(order.captureId, Math.round(Number(res.amount?.value ?? 0) * 100), res.id);
     }
+    // marked as handled only once it was applied, so a delivery that failed halfway is retried
+    seenEvents.add(event.id);
+    if (seenEvents.size > 5000) seenEvents.delete(seenEvents.values().next().value!);
     return { ok: true, verified };
   });
 

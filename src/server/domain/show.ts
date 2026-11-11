@@ -345,6 +345,7 @@ export class Show {
     const order = this.orders.get(orderId);
     if (!order || order.status === "captured") return;
     order.status = status;
+    order.captureAttempt = (order.captureAttempt ?? 0) + 1;
     for (const id of order.claimIds) {
       const c = this.claims.get(id);
       if (c) c.capturing = false;

@@ -81,9 +81,13 @@ export class PayPal {
   }
 
   /** Capture is idempotent on our side too: the request id is the order id. */
-  async captureOrder(orderId: string) {
+  /**
+   * The request id is per attempt: a network retry of the same attempt is a no-op for PayPal,
+   * but a retry after a decline (the buyer picked another card) is a new capture.
+   */
+  async captureOrder(orderId: string, attempt = 0) {
     try {
-      const res = await this.orders.captureOrder({ id: orderId, paypalRequestId: `cap-${orderId}`, prefer: "return=representation" });
+      const res = await this.orders.captureOrder({ id: orderId, paypalRequestId: `cap-${orderId}-${attempt}`, prefer: "return=representation" });
       const capture = res.result.purchaseUnits?.[0]?.payments?.captures?.[0];
       return { status: res.result.status, captureId: capture?.id, captureStatus: capture?.status as string | undefined, payer: res.result.payer?.emailAddress };
     } catch (err) {
@@ -92,6 +96,21 @@ export class PayPal {
       }
       throw err;
     }
+  }
+
+  /**
+   * Refunds part of a capture. The request id comes from the seller's confirmed proposal, so a
+   * timed-out refund can be retried safely: PayPal returns the first result instead of paying twice.
+   */
+  async refundCapture(captureId: string, cents: number, requestId: string, note: string): Promise<{ id?: string; status?: string }> {
+    const res = await fetch(`${API_BASE}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await this.accessToken()}`, "Content-Type": "application/json", "PayPal-Request-Id": requestId, Prefer: "return=representation" },
+      body: JSON.stringify({ amount: { value: (cents / 100).toFixed(2), currency_code: "USD" }, note_to_payer: note.slice(0, 255) }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { id?: string; status?: string; message?: string };
+    if (!res.ok) throw Object.assign(new Error(body.message ?? `PayPal refund failed (${res.status})`), { status: res.status });
+    return { id: body.id, status: body.status };
   }
 
   /** What PayPal says about an order right now. Used to reconcile after a capture call fails. */

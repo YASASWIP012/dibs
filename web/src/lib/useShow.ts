@@ -50,7 +50,7 @@ export interface Live {
   socket: React.MutableRefObject<WebSocket | null>;
   webhooks: Array<{ text: string; at: number }>;
   /** Things the co-host suggested on its own (seller and judge-mode views only). */
-  suggestions: Array<{ id: string; kind: string; label: string }>;
+  suggestions: Array<{ id: string; kind: string; label: string; done?: boolean }>;
 }
 
 export function useShow(showId: string | undefined, role: "seller" | "buyer" | "watch", opts: { sellerKey?: string; buyerToken?: string } = {}): Live {
@@ -62,7 +62,7 @@ export function useShow(showId: string | undefined, role: "seller" | "buyer" | "
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<ShowEvent | null>(null);
   const [webhooks, setWebhooks] = useState<Array<{ text: string; at: number }>>([]);
-  const [suggestions, setSuggestions] = useState<Array<{ id: string; kind: string; label: string }>>([]);
+  const [suggestions, setSuggestions] = useState<Array<{ id: string; kind: string; label: string; done?: boolean }>>([]);
   const socket = useRef<WebSocket | null>(null);
 
   useEffect(() => {

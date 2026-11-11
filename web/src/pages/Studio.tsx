@@ -477,8 +477,9 @@ export function Recap({ show }: { show: ReturnType<typeof useShow>["show"] }) {
 type Proposal = { id: string; kind: string; label: string };
 type Turn = { q: string; a: string; steps: Array<{ tool: string; ok: boolean }>; proposals: Array<Proposal & { state?: "done" | "failed" | "busy"; note?: string }> };
 
-function Cohost({ session, webhooks, suggestions = [] }: { session: Session; webhooks: Array<{ text: string; at: number }>; suggestions?: Proposal[] }) {
+function Cohost({ session, webhooks, suggestions = [] }: { session: Session; webhooks: Array<{ text: string; at: number }>; suggestions?: Array<Proposal & { done?: boolean }> }) {
   const [done, setDone] = useState<Record<string, { state: "busy" | "done" | "failed"; note?: string }>>({});
+  const [auto, setAuto] = useState(false);
   const [q, setQ] = useState("");
   const [log, setLog] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -512,11 +513,24 @@ function Cohost({ session, webhooks, suggestions = [] }: { session: Session; web
     <section className="panel-card">
       <div className="panel-head">Co-host</div>
       <div className="panel-body" style={{ display: "grid", gap: 10 }}>
+        <label className="row" style={{ justifyContent: "space-between" }}>
+          <span className="t-small">Let it send pay reminders by itself</span>
+          <input
+            type="checkbox"
+            className="switch"
+            checked={auto}
+            onChange={async (e) => {
+              const v = e.target.checked;
+              setAuto(v);
+              await api(`/api/shows/${session.showId}/settings`, { autoRemind: v }, { "x-seller-key": session.sellerKey }).catch(() => setAuto(!v));
+            }}
+          />
+        </label>
         {suggestions.length > 0 && (
           <div style={{ display: "grid", gap: 6 }} aria-live="polite" aria-label="Co-host suggestions">
             <span className="t-micro">Suggested by the co-host</span>
             {suggestions.slice(-4).map((p) => {
-              const d = done[p.id];
+              const d = p.done ? { state: "done" as const, note: "Sent" } : done[p.id];
               return (
                 <div key={p.id} className="holder">
                   <span className="grow" style={{ fontWeight: 600 }}>{p.label}</span>

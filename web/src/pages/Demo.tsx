@@ -81,11 +81,11 @@ export function Demo() {
           <ChatPanel show={show} />
           {live.suggestions.length > 0 && (
             <section className="panel-card" aria-live="polite">
-              <div className="panel-head">Co-host suggestions (the seller would confirm these)</div>
+              <div className="panel-head">Co-host, working the show (reminders go out on their own; money waits for the seller)</div>
               <div className="panel-body" style={{ display: "grid", gap: 6 }}>
                 {live.suggestions.slice(-4).map((p) => (
                   <div key={p.id} className="holder">
-                    <span className="pill pill--model">{p.kind}</span>
+                    <span className={`pill ${p.done ? "pill--sold" : "pill--model"}`}>{p.done ? "sent" : p.kind}</span>
                     <span className="grow">{p.label}</span>
                   </div>
                 ))}

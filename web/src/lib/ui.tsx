@@ -6,6 +6,15 @@ export function Logo({ size = 28 }: { size?: number }) {
   return <img src="/icon.svg" width={size} height={size} alt="" className="app-icon" style={{ width: size, height: size }} />;
 }
 
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+/** "1 minute 20 seconds left to pay", for screen readers. */
+export function spokenTime(ms: number) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m ? plural(m, "minute") + (s ? " " : "") : ""}${s || !m ? plural(s, "second") : ""} left to pay`;
+}
+
 export function Countdown({ claim, now, holdMs }: { claim: Claim; now: number; holdMs: number }) {
   if (claim.status === "paid") return <span className="ring is-paid" aria-label="Paid" />;
   const left = Math.max(0, (claim.deadline ?? now) - now);
@@ -13,7 +22,7 @@ export function Countdown({ claim, now, holdMs }: { claim: Claim; now: number; h
   return (
     <>
       <span className={`ring${p < 0.25 ? " is-low" : ""}`} style={{ "--p": p } as React.CSSProperties} aria-hidden="true" />
-      <span className="t-mono" role="timer" aria-label={`${Math.floor(left / 60000)} minutes ${Math.ceil((left % 60000) / 1000)} seconds left to pay`}>
+      <span className="t-mono" role="timer" aria-label={spokenTime(left)}>
         {clock(left)}
       </span>
     </>

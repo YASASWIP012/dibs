@@ -309,3 +309,35 @@ describe("price questions", () => {
     expect(show.chat.find((m) => m.system && m.buyerId === ana.id)?.text).toContain("$40");
   });
 });
+
+describe("co-host working the show", () => {
+  it("sends a reminder by itself when the seller allows it, and moves no money", async () => {
+    const s = await showWithLot();
+    const room = built.rooms.get(s.showId)!;
+    room.cohost = { suggest: () => { throw new Error("should not need a proposal"); } } as never;
+    room.autoRemind = true;
+    const maria = await join(s.showId, "maria");
+    await post(`/api/shows/${s.showId}/chat`, { token: maria.token, text: "mine" });
+    await settle();
+    room.show.holder(1)!.deadline = Date.now() + 10_000; // 10 s left
+    built.tick();
+    await settle();
+    expect(room.show.chat.some((m) => m.system && m.buyerId === maria.id && /seconds left to pay for lot 1/.test(m.text))).toBe(true);
+    expect(pp.captureOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("idempotency", () => {
+  it("retries a declined capture as a new attempt", async () => {
+    const s = await showWithLot();
+    const maria = await join(s.showId, "maria");
+    await post(`/api/shows/${s.showId}/chat`, { token: maria.token, text: "mine" });
+    await settle();
+    const { body: co } = await post(`/api/shows/${s.showId}/checkout`, { token: maria.token });
+    pp.nextStatus = "DECLINED";
+    await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId: co.orderId });
+    pp.nextStatus = "COMPLETED";
+    expect((await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId: co.orderId })).status).toBe(200);
+    expect(pp.captureOrder.mock.calls.map((c) => (c as unknown[])[1])).toEqual([0, 1]);
+  });
+});

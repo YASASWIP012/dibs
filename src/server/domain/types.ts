@@ -62,6 +62,8 @@ export interface PendingOrder {
   refundedCents?: number;
   /** Refunds per lot, so one lot in a multi-lot order can't be refunded twice. */
   refundedByLot?: Record<number, number>;
+  /** Bumped after a declined capture so a retry is a new attempt for PayPal, not a replay. */
+  captureAttempt?: number;
   /** Lots PayPal captured after their hold had already moved on: money to send back, not a sale. */
   needsRefund?: number[];
 }

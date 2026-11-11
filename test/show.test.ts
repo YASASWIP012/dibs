@@ -216,3 +216,32 @@ describe("phrasing from a real YouTube live sale", () => {
   ];
   it.each(real)("%s → %s", (text, kind) => expect(readChatByRules(text).kind).toBe(kind));
 });
+
+import { Cohost } from "../src/server/ai/cohost.js";
+
+describe("refunds that time out", () => {
+  it("repeat with the same request id and are recorded once", async () => {
+    const { show, jake } = setup();
+    show.claim(jake.id, 14, "mine", "en");
+    show.recordOrder("O-9", jake.id, show.payable(jake.id));
+    show.markCaptured("O-9", "CAP-9");
+    const cohost = new Cohost({ clientId: "x", clientSecret: "y", geminiKey: "z", model: "m" });
+    const p = cohost.suggest(show, { kind: "refund", lot: 14, amountCents: 1000, captureId: "CAP-9", handle: "jake" });
+    const ids: string[] = [];
+    let fail = true;
+    const refund = async (_c: string, _cents: number, requestId: string) => {
+      ids.push(requestId);
+      if (fail) {
+        fail = false;
+        throw new Error("timeout");
+      }
+      return { id: "R-9", status: "COMPLETED" };
+    };
+    const act = { release: () => undefined, remind: async () => undefined, refund };
+    expect((await cohost.confirm(show, p.id, act)).ok).toBe(false);
+    expect((await cohost.confirm(show, p.id, act)).ok).toBe(true);
+    expect(ids[0]).toBe(ids[1]);
+    expect(show.orders.get("O-9")?.refundedCents).toBe(1000);
+    expect((await cohost.confirm(show, p.id, act)).ok).toBe(false); // spent
+  });
+});
