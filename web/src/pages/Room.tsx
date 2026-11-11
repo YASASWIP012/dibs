@@ -15,7 +15,7 @@ function savedBuyer(showId: string): Session | null {
 
 export function Room({ showId, embedded }: { showId: string; embedded?: boolean }) {
   const [buyer, setBuyer] = useState<Session | null>(() => savedBuyer(showId));
-  const live = useShow(showId, "buyer", { buyerId: buyer?.id });
+  const live = useShow(showId, "buyer", { buyerToken: buyer?.token });
   const { show, now, frameUrl, caption } = live;
   const [text, setText] = useState("");
   const [toast, setToast] = useState<string | null>(null);

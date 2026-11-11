@@ -5,7 +5,15 @@ import { Cohost } from "./ai/cohost.js";
 import { PayPal } from "./paypal/paypal.js";
 import { buildApp } from "./app.js";
 
-const WEBHOOK_EVENTS = ["CHECKOUT.ORDER.APPROVED", "PAYMENT.CAPTURE.COMPLETED", "PAYMENT.CAPTURE.DENIED", "PAYMENT.CAPTURE.REFUNDED"];
+const WEBHOOK_EVENTS = [
+  "CHECKOUT.ORDER.APPROVED",
+  "PAYMENT.CAPTURE.COMPLETED",
+  "PAYMENT.CAPTURE.PENDING",
+  "PAYMENT.CAPTURE.DENIED",
+  "PAYMENT.CAPTURE.REFUNDED",
+  "PAYMENT.CAPTURE.REVERSED",
+  "CUSTOMER.DISPUTE.CREATED",
+];
 
 const ai = new Ai(config.GEMINI_API_KEY, config.GEMINI_MODEL, config.GEMINI_VISION_MODEL);
 const paypal = paypalReady ? new PayPal({ clientId: config.PAYPAL_CLIENT_ID!, clientSecret: config.PAYPAL_CLIENT_SECRET! }) : undefined;

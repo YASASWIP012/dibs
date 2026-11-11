@@ -13,9 +13,16 @@ function fakePayPal() {
     createOrder: vi.fn(async () => ({ id: `ORDER-${++n}`, status: "CREATED" })),
     captureOrder: vi.fn(async (orderId: string) => {
       if (captureGate.release === undefined && p.slow) await new Promise<void>((r) => (captureGate.release = r));
-      return { status: p.nextStatus, captureId: `CAP-${orderId}` };
+      if (p.captureThrows) throw new Error("socket hang up");
+      return { status: p.nextStatus === "PENDING" ? "COMPLETED" : p.nextStatus, captureId: `CAP-${orderId}`, captureStatus: p.nextStatus };
+    }),
+    getOrder: vi.fn(async (orderId: string) => {
+      if (p.lookup === "throws") throw new Error("still down");
+      return p.lookup === "captured" ? { status: "COMPLETED", captureId: `CAP-${orderId}`, captureStatus: "COMPLETED" } : { status: "APPROVED" };
     }),
     nextStatus: "COMPLETED" as string,
+    captureThrows: false,
+    lookup: "approved" as "approved" | "captured" | "throws",
     slow: false,
     captureGate,
   };
@@ -214,5 +221,79 @@ describe("judge mode", () => {
     expect(cfg.body).not.toContain("sandbox-only");
     const { body } = await post("/api/demo", {});
     expect(body.demoBuyer.email).toBe("buyer@example.com");
+  });
+});
+
+describe("capture when PayPal is unreliable", () => {
+  async function ordered() {
+    const s = await showWithLot();
+    const maria = await join(s.showId, "maria");
+    const jake = await join(s.showId, "jake");
+    await post(`/api/shows/${s.showId}/chat`, { token: maria.token, text: "mine" });
+    await post(`/api/shows/${s.showId}/chat`, { token: jake.token, text: "mine" });
+    await settle();
+    const { body: co } = await post(`/api/shows/${s.showId}/checkout`, { token: maria.token });
+    return { s, maria, jake, orderId: co.orderId as string, show: built.rooms.get(s.showId)!.show };
+  }
+
+  it("asks PayPal after a timeout, and counts the sale when the capture went through", async () => {
+    const { s, maria, orderId, show } = await ordered();
+    pp.captureThrows = true;
+    pp.lookup = "captured";
+    const cap = await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId });
+    expect(cap.status).toBe(200);
+    expect(pp.getOrder).toHaveBeenCalledWith(orderId);
+    expect(show.lots.get(1)?.status).toBe("sold");
+  });
+
+  it("keeps the item reserved when PayPal can't be reached at all", async () => {
+    const { s, maria, orderId, show } = await ordered();
+    pp.captureThrows = true;
+    pp.lookup = "throws";
+    expect((await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId })).status).toBe(409);
+    show.claimsFor(1)[0]!.deadline = Date.now() - 1;
+    built.tick();
+    expect(show.holder(1)?.handle).toBe("maria"); // not handed to jake while the outcome is unknown
+  });
+
+  it("unlocks when PayPal confirms nothing was captured", async () => {
+    const { s, maria, orderId, show } = await ordered();
+    pp.captureThrows = true;
+    pp.lookup = "approved";
+    expect((await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId })).status).toBe(500);
+    expect(show.claimsFor(1)[0]?.capturing).toBe(false);
+  });
+
+  it("treats a PENDING capture as reserved, not sold, until the webhook says so", async () => {
+    const { s, maria, orderId, show } = await ordered();
+    pp.nextStatus = "PENDING";
+    expect((await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId })).status).toBe(200);
+    expect(show.lots.get(1)?.status).toBe("held");
+    show.claimsFor(1)[0]!.deadline = Date.now() - 1;
+    built.tick();
+    expect(show.holder(1)?.handle).toBe("maria");
+    await post("/api/paypal/webhook", { id: "WH-P1", event_type: "PAYMENT.CAPTURE.COMPLETED", resource: { id: `CAP-${orderId}`, supplementary_data: { related_ids: { order_id: orderId } } } });
+    expect(show.lots.get(1)?.status).toBe("sold");
+  });
+
+  it("never sells a lot twice when PayPal confirms after the lot moved on", async () => {
+    const { orderId, show } = await ordered();
+    // maria's hold lapses before anyone captured; jake now holds lot 1
+    show.claimsFor(1)[0]!.deadline = Date.now() - 1;
+    built.tick();
+    expect(show.holder(1)?.handle).toBe("jake");
+    // then PayPal reports maria's capture anyway
+    await post("/api/paypal/webhook", { id: "WH-L1", event_type: "PAYMENT.CAPTURE.COMPLETED", resource: { id: `CAP-${orderId}`, supplementary_data: { related_ids: { order_id: orderId } } } });
+    expect(show.holder(1)?.handle).toBe("jake");
+    expect(show.lots.get(1)?.status).toBe("held");
+    expect(show.orders.get(orderId)?.needsRefund).toEqual([1]);
+  });
+});
+
+describe("limits", () => {
+  it("slows down one address creating shows in bulk", async () => {
+    let last = 0;
+    for (let i = 0; i < 31; i++) last = (await post("/api/shows", {})).status;
+    expect(last).toBe(429);
   });
 });

@@ -79,6 +79,19 @@ export function Demo() {
             </div>
           </section>
           <ChatPanel show={show} />
+          {live.suggestions.length > 0 && (
+            <section className="panel-card" aria-live="polite">
+              <div className="panel-head">Co-host suggestions (the seller would confirm these)</div>
+              <div className="panel-body" style={{ display: "grid", gap: 6 }}>
+                {live.suggestions.slice(-4).map((p) => (
+                  <div key={p.id} className="holder">
+                    <span className="pill pill--model">{p.kind}</span>
+                    <span className="grow">{p.label}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
         <aside style={{ display: "grid", gap: 16, position: "sticky", top: 76 }}>
           <section className="panel-card">

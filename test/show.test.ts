@@ -188,3 +188,18 @@ describe("hold release and refunds", () => {
     expect(checkRefund(show, 14, 1500)).toMatchObject({ ok: true });
   });
 });
+
+describe("per-lot refund cap", () => {
+  it("won't refund the same lot twice inside a two-lot order", () => {
+    const { show, jake } = setup();
+    show.openLot({ number: 15, title: "Pothos cutting", priceCents: 2500 });
+    show.claim(jake.id, 14, "14", "en");
+    show.claim(jake.id, 15, "15", "en");
+    show.recordOrder("O-2", jake.id, show.payable(jake.id));
+    show.markCaptured("O-2", "CAP-2");
+    expect(checkRefund(show, 15, 2500)).toMatchObject({ ok: true });
+    show.recordRefund("CAP-2", 2500, "R-15", 15);
+    expect(checkRefund(show, 15, 2500)).toMatchObject({ ok: false });
+    expect(checkRefund(show, 14, 4000)).toMatchObject({ ok: true });
+  });
+});

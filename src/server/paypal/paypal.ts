@@ -85,15 +85,20 @@ export class PayPal {
     try {
       const res = await this.orders.captureOrder({ id: orderId, paypalRequestId: `cap-${orderId}`, prefer: "return=representation" });
       const capture = res.result.purchaseUnits?.[0]?.payments?.captures?.[0];
-      return { status: res.result.status, captureId: capture?.id, payer: res.result.payer?.emailAddress };
+      return { status: res.result.status, captureId: capture?.id, captureStatus: capture?.status as string | undefined, payer: res.result.payer?.emailAddress };
     } catch (err) {
       if (err instanceof ApiError && /ORDER_ALREADY_CAPTURED/.test(String(err.body))) {
-        const order = await this.orders.getOrder({ id: orderId });
-        const capture = order.result.purchaseUnits?.[0]?.payments?.captures?.[0];
-        return { status: order.result.status, captureId: capture?.id, payer: order.result.payer?.emailAddress };
+        return this.getOrder(orderId);
       }
       throw err;
     }
+  }
+
+  /** What PayPal says about an order right now. Used to reconcile after a capture call fails. */
+  async getOrder(orderId: string) {
+    const order = await this.orders.getOrder({ id: orderId });
+    const capture = order.result.purchaseUnits?.[0]?.payments?.captures?.[0];
+    return { status: order.result.status, captureId: capture?.id, captureStatus: capture?.status as string | undefined, payer: order.result.payer?.emailAddress };
   }
 
   async addTracking(orderId: string, captureId: string, trackingNumber: string, carrier = "USPS") {

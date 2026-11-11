@@ -36,6 +36,7 @@ type WebhookEvent = {
     amount?: { value?: string };
     supplementary_data?: { related_ids?: { order_id?: string } };
     links?: Array<{ rel?: string; href?: string }>;
+    disputed_transactions?: Array<{ seller_transaction_id?: string }>;
   };
 };
 
@@ -71,6 +72,17 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
     return reply.status(status).send({ error: "error", message: status >= 500 ? "Something went wrong on our side" : (err as Error).message });
   });
 
+  // A small per-address limit on creating shows, so one visitor can't flood the server.
+  const created = new Map<string, number[]>();
+  app.addHook("onRequest", async (req, reply) => {
+    if (req.method !== "POST" || (req.url !== "/api/shows" && req.url !== "/api/demo")) return;
+    const now = Date.now();
+    const recent = (created.get(req.ip) ?? []).filter((t) => now - t < 10 * 60_000);
+    if (recent.length >= 30) return reply.status(429).send({ error: "slow_down", message: "Too many shows from here. Try again in a few minutes." });
+    recent.push(now);
+    created.set(req.ip, recent);
+  });
+
   // ---------- public config ----------
 
   app.get("/api/config", async () => ({ paypalClientId: deps.paypalClientId ?? null, ai: deps.ai.enabled, holdSeconds: deps.holdSeconds }));
@@ -81,6 +93,7 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
   app.post("/api/shows", async (req) => {
     const body = z.object({ holdSeconds: z.number().int().min(15).max(3600).optional(), payeeEmail: z.string().email().max(120).optional() }).parse(req.body ?? {});
     const r = new Room((body.holdSeconds ?? deps.holdSeconds) * 1000, deps.ai, deps.payments, undefined, body.payeeEmail);
+    r.cohost = deps.cohost;
     rooms.set(r.show.id, r);
     return { showId: r.show.id, sellerKey: r.sellerKey };
   });
@@ -88,6 +101,12 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
   app.get("/api/shows/:id", async (req) => {
     const r = room((req.params as { id: string }).id);
     return { ...r.show.snapshot(), viewers: r.viewers };
+  });
+
+  app.get("/api/shows/:id/suggestions", async (req) => {
+    const r = room((req.params as { id: string }).id);
+    requireSeller(r, req.headers["x-seller-key"]);
+    return { suggestions: r.suggestions.map(({ id, kind, label }) => ({ id, kind, label })) };
   });
 
   app.post("/api/shows/:id/lots", async (req) => {
@@ -171,6 +190,13 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
         r.show.releaseHold(lot);
         r.tick();
       },
+      track: async (orderId, captureId, trackingNumber, carrier) => deps.payments?.addTracking?.(orderId, captureId, trackingNumber, carrier),
+      relist: (lot, priceCents) => {
+        const l = r.show.lots.get(lot);
+        if (!l) return;
+        r.show.openLot({ number: lot, title: l.title, description: l.description, priceCents, photo: l.photo, spoken: l.spoken });
+        r.show.caption("Lot " + lot + " is back: " + l.title + ", now $" + (priceCents / 100).toFixed(0));
+      },
       remind: async (buyerId, lot) => {
         const b = r.show.buyers.get(buyerId);
         if (b) await r.reply(b, `@${b.handle} lot ${lot} is still waiting for you. Pay soon or it goes to the next person.`);
@@ -182,6 +208,7 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
 
   app.post("/api/demo", async () => {
     const r = new Room(40_000, deps.ai, deps.payments);
+    r.cohost = deps.cohost;
     r.demo = true;
     r.stopDemo = runDemo(r);
     rooms.set(r.show.id, r);
@@ -204,14 +231,17 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
     const res = event.resource ?? {};
     const orderId = res.supplementary_data?.related_ids?.order_id ?? (event.event_type === "CHECKOUT.ORDER.APPROVED" ? res.id : undefined);
     // a refund's capture id is the last segment of its "up" link
-    const captureOfRefund = res.links?.find((l) => l.rel === "up")?.href?.split("/").pop();
+    const captureOfRefund =
+      res.links?.find((l) => l.rel === "up")?.href?.split("/").pop() ??
+      (event.event_type === "CUSTOMER.DISPUTE.CREATED" ? res.disputed_transactions?.[0]?.seller_transaction_id : undefined);
     for (const r of rooms.values()) {
       const order = orderId ? r.show.orders.get(orderId) : [...r.show.orders.values()].find((o) => o.captureId && o.captureId === captureOfRefund);
       if (!order) continue;
       r.show.postChat({ buyerId: order.buyerId, handle: "paypal", text: `${event.event_type} · verified`, system: true });
-      if (event.event_type === "PAYMENT.CAPTURE.COMPLETED") r.show.markCaptured(order.id, res.id);
+      if (event.event_type === "PAYMENT.CAPTURE.COMPLETED") r.settle(order.id, res.id);
       else if (event.event_type === "PAYMENT.CAPTURE.DENIED") r.show.failCapture(order.id, "denied");
-      else if (event.event_type === "PAYMENT.CAPTURE.REFUNDED" && order.captureId && res.id) r.show.recordRefund(order.captureId, Math.round(Number(res.amount?.value ?? 0) * 100), res.id);
+      else if ((event.event_type === "PAYMENT.CAPTURE.REFUNDED" || event.event_type === "PAYMENT.CAPTURE.REVERSED") && order.captureId && res.id)
+        r.show.recordRefund(order.captureId, Math.round(Number(res.amount?.value ?? 0) * 100), res.id);
     }
     return { ok: true, verified };
   });
@@ -221,7 +251,7 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
   app.register(async (scope) => {
     scope.get("/ws/:id", { websocket: true }, (socket, req) => {
       const { id } = req.params as { id: string };
-      const q = req.query as { role?: string; key?: string; buyer?: string };
+      const q = req.query as { role?: string; key?: string; token?: string };
       const r = rooms.get(id);
       if (!r) return socket.close(4404, "no show");
       if (q.role === "seller") {
@@ -230,7 +260,8 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
       } else if (q.role === "watch" && r.demo) {
         r.attach(socket, "watch");
       } else {
-        r.attach(socket, "buyer", q.buyer);
+        // a buyer only receives their own replies when they present their secret token
+        r.attach(socket, "buyer", r.show.buyerByToken(q.token)?.id);
       }
     });
   });

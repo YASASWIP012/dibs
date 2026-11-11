@@ -316,6 +316,12 @@ export class Show {
       const c = this.claims.get(id);
       if (!c) continue;
       c.capturing = false;
+      // PayPal can confirm late (a webhook after a timeout). If the lot already went to the next
+      // person, it is not sold twice: the money is flagged to go back instead.
+      if (c.status === "lapsed") {
+        order.needsRefund = [...(order.needsRefund ?? []), c.lotNumber];
+        continue;
+      }
       c.status = "paid";
       const lot = this.lots.get(c.lotNumber);
       if (lot) {
@@ -330,12 +336,14 @@ export class Show {
 
   /** Records a refund PayPal already made (from the co-host or a webhook). Idempotent per refund id. */
   private readonly seenRefunds = new Set<string>();
-  recordRefund(captureId: string, cents: number, refundId: string): PendingOrder | undefined {
+  recordRefund(captureId: string, cents: number, refundId: string, lot?: number): PendingOrder | undefined {
     if (this.seenRefunds.has(refundId)) return undefined;
     const order = [...this.orders.values()].find((o) => o.captureId === captureId);
     if (!order) return undefined;
     this.seenRefunds.add(refundId);
-    order.refundedCents = Math.min(order.total.cents, (order.refundedCents ?? 0) + Math.max(0, Math.round(cents)));
+    const amount = Math.max(0, Math.round(cents));
+    order.refundedCents = Math.min(order.total.cents, (order.refundedCents ?? 0) + amount);
+    if (lot !== undefined) order.refundedByLot = { ...order.refundedByLot, [lot]: (order.refundedByLot?.[lot] ?? 0) + amount };
     this.emit({ type: "order.captured", order });
     return order;
   }

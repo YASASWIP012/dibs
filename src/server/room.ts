@@ -3,12 +3,15 @@ import type { WebSocket } from "ws";
 import { Show, ShowError } from "./domain/show.js";
 import type { Buyer, Claim, ClaimReading, ShowEvent } from "./domain/types.js";
 import type { Ai } from "./ai/gemini.js";
+import type { Cohost, Proposal } from "./ai/cohost.js";
 import type { OrderLine } from "./paypal/paypal.js";
 
 /** The slice of PayPal a room needs. The real one is paypal/paypal.ts; tests pass a fake. */
 export interface Payments {
   createOrder(showId: string, buyerHandle: string, lines: OrderLine[], requestId: string, payeeEmail?: string): Promise<{ id: string; status?: string }>;
-  captureOrder(orderId: string): Promise<{ status?: string; captureId?: string }>;
+  captureOrder(orderId: string): Promise<{ status?: string; captureId?: string; captureStatus?: string }>;
+  getOrder?(orderId: string): Promise<{ status?: string; captureId?: string; captureStatus?: string }>;
+  addTracking?(orderId: string, captureId: string, trackingNumber: string, carrier?: string): Promise<string | undefined>;
 }
 
 type Role = "seller" | "buyer" | "watch";
@@ -34,6 +37,10 @@ export class Room {
   readonly createdAt = Date.now();
   demo = false;
   stopDemo?: () => void;
+  /** Set when the server has a co-host; it watches the clock and suggests actions. */
+  cohost?: Cohost;
+  private readonly nudged = new Set<string>();
+  readonly suggestions: Proposal[] = [];
   private readonly peers = new Set<Peer>();
   private latestFrame?: Buffer;
   /** One queue for the whole show: claims land in the order the server received them. */
@@ -151,11 +158,35 @@ export class Room {
   }
 
   /** Runs every half second. Expired holds roll to the next person, who hears about it in their language. */
+  private suggest(p: Proposal) {
+    this.suggestions.push(p);
+    if (this.suggestions.length > 30) this.suggestions.shift();
+    const msg = JSON.stringify({ type: "cohost.proposal", proposal: { id: p.id, kind: p.kind, label: p.label } });
+    for (const peer of this.peers) if (peer.role !== "buyer" && peer.socket.readyState === 1) peer.socket.send(msg);
+  }
+
   tick() {
+    // the co-host watches the clock: a buyer close to running out gets a reminder suggestion
+    if (this.cohost) {
+      const now = Date.now();
+      for (const c of this.show.claims.values()) {
+        if (c.status !== "holding" || c.capturing || !c.deadline || this.nudged.has(c.id)) continue;
+        const left = c.deadline - now;
+        if (left > 0 && left <= Math.min(30_000, this.show.holdMs / 3)) {
+          this.nudged.add(c.id);
+          this.suggest(this.cohost.suggest(this.show, { kind: "remind", lot: c.lotNumber, handle: c.handle, buyerId: c.buyerId }));
+        }
+      }
+    }
     for (const { lapsed, next } of this.show.tick()) {
       const lot = this.show.lots.get(lapsed.lotNumber)!;
       const lapsedBuyer = this.show.buyers.get(lapsed.buyerId);
       if (lapsedBuyer) void this.reply(lapsedBuyer, `Time ran out on lot ${lot.number}, so it went to the next person in line.`);
+      if (!next && this.cohost) {
+        // nobody waiting: suggest bringing it back 20% cheaper, rounded to a whole dollar
+        const price = Math.max(100, Math.round((lot.price.cents * 0.8) / 100) * 100);
+        this.suggest(this.cohost.suggest(this.show, { kind: "relist", lot: lot.number, priceCents: price }));
+      }
       const nextBuyer = next && this.show.buyers.get(next.buyerId);
       if (nextBuyer) {
         void this.reply(nextBuyer, `@${nextBuyer.handle} good news: lot ${lot.number} (${lot.title}, ${fmt(lot.price.cents)}) is yours now. Pay within ${mmss(this.show.holdMs)}.`);
@@ -178,22 +209,51 @@ export class Room {
     return existing ?? this.show.recordOrder(id, buyerId, claims);
   }
 
+  /** Marks an order paid and, if PayPal confirmed it too late for some lot, suggests sending that money back. */
+  settle(orderId: string, captureId?: string) {
+    const done = this.show.markCaptured(orderId, captureId);
+    const buyer = this.show.buyers.get(done.buyerId);
+    for (const lot of done.needsRefund ?? []) {
+      const price = this.show.lots.get(lot)?.price.cents ?? 0;
+      if (this.cohost && done.captureId && buyer && !this.flaggedRefunds.has(`${orderId}:${lot}`)) {
+        this.flaggedRefunds.add(`${orderId}:${lot}`);
+        this.suggest(this.cohost.suggest(this.show, { kind: "refund", lot, amountCents: price, captureId: done.captureId, handle: buyer.handle }));
+      }
+    }
+    return done;
+  }
+  private readonly flaggedRefunds = new Set<string>();
+
   async capture(orderId: string) {
     if (!this.paypal) throw new ShowError("order_missing", "PayPal is not configured");
     const order = this.show.beginCapture(orderId);
     if (order.status === "captured") return order;
-    let res: { status?: string; captureId?: string };
+    let res: { status?: string; captureId?: string; captureStatus?: string };
     try {
       res = await this.paypal.captureOrder(orderId);
     } catch (err) {
-      this.show.failCapture(orderId);
-      throw err;
+      // A timeout or 5xx doesn't mean nothing happened. Ask PayPal before letting the clock
+      // hand the lot on; if PayPal can't say either way, the hold stays locked until the
+      // webhook settles it.
+      const check = await this.paypal.getOrder?.(orderId).catch(() => undefined);
+      if (!check) throw new ShowError("order_stale", "We couldn't confirm the payment yet. The item stays reserved while PayPal finishes.");
+      if (!check.captureStatus) {
+        this.show.failCapture(orderId);
+        throw err;
+      }
+      res = check;
     }
-    if (res.status !== "COMPLETED") {
-      this.show.failCapture(orderId, res.status === "DECLINED" ? "denied" : "created");
+    const captureStatus = res.captureStatus ?? res.status;
+    if (captureStatus === "PENDING") {
+      const buyer = this.show.buyers.get(order.buyerId);
+      if (buyer) void this.reply(buyer, "PayPal is still processing your payment. Your items stay reserved until it clears.");
+      return order;
+    }
+    if (captureStatus !== "COMPLETED") {
+      this.show.failCapture(orderId, captureStatus === "DECLINED" ? "denied" : "created");
       throw new ShowError("order_stale", "PayPal didn't complete the payment. Nothing was charged.");
     }
-    const done = this.show.markCaptured(orderId, res.captureId);
+    const done = this.settle(orderId, res.captureId);
     const buyer = this.show.buyers.get(done.buyerId);
     if (buyer) void this.reply(buyer, `Paid, thank you. ${fmt(done.total.cents)} received. The seller will ship it soon.`);
     return done;

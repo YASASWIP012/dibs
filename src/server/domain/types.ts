@@ -58,6 +58,10 @@ export interface PendingOrder {
   createdAt: number;
   captureId?: string;
   refundedCents?: number;
+  /** Refunds per lot, so one lot in a multi-lot order can't be refunded twice. */
+  refundedByLot?: Record<number, number>;
+  /** Lots PayPal captured after their hold had already moved on: money to send back, not a sale. */
+  needsRefund?: number[];
 }
 
 export interface ChatMessage {

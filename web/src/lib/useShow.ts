@@ -49,9 +49,11 @@ export interface Live {
   lastEvent: ShowEvent | null;
   socket: React.MutableRefObject<WebSocket | null>;
   webhooks: Array<{ text: string; at: number }>;
+  /** Things the co-host suggested on its own (seller and judge-mode views only). */
+  suggestions: Array<{ id: string; kind: string; label: string }>;
 }
 
-export function useShow(showId: string | undefined, role: "seller" | "buyer" | "watch", opts: { sellerKey?: string; buyerId?: string } = {}): Live {
+export function useShow(showId: string | undefined, role: "seller" | "buyer" | "watch", opts: { sellerKey?: string; buyerToken?: string } = {}): Live {
   const [show, dispatch] = useReducer(reduce, null);
   const [connected, setConnected] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -60,6 +62,7 @@ export function useShow(showId: string | undefined, role: "seller" | "buyer" | "
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<ShowEvent | null>(null);
   const [webhooks, setWebhooks] = useState<Array<{ text: string; at: number }>>([]);
+  const [suggestions, setSuggestions] = useState<Array<{ id: string; kind: string; label: string }>>([]);
   const socket = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -75,7 +78,7 @@ export function useShow(showId: string | undefined, role: "seller" | "buyer" | "
     const connect = () => {
       const q = new URLSearchParams({ role });
       if (opts.sellerKey) q.set("key", opts.sellerKey);
-      if (opts.buyerId) q.set("buyer", opts.buyerId);
+      if (opts.buyerToken) q.set("token", opts.buyerToken);
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/${showId}?${q}`);
       ws.binaryType = "blob";
       socket.current = ws;
@@ -93,6 +96,10 @@ export function useShow(showId: string | undefined, role: "seller" | "buyer" | "
           return;
         }
         const msg = JSON.parse(m.data as string);
+        if (msg.type === "cohost.proposal") {
+          setSuggestions((s) => [...s, msg.proposal].slice(-20));
+          return;
+        }
         if (msg.type === "snapshot") {
           setOffset(msg.show.serverNow - Date.now());
           dispatch({ type: "snapshot", show: msg.show });
@@ -112,10 +119,10 @@ export function useShow(showId: string | undefined, role: "seller" | "buyer" | "
       clearTimeout(retry);
       socket.current?.close();
     };
-  }, [showId, role, opts.sellerKey, opts.buyerId]);
+  }, [showId, role, opts.sellerKey, opts.buyerToken]);
 
   return useMemo(
-    () => ({ show, connected, now, caption, frameUrl, lastEvent, socket, webhooks }),
-    [show, connected, now, caption, frameUrl, lastEvent, webhooks],
+    () => ({ show, connected, now, caption, frameUrl, lastEvent, socket, webhooks, suggestions }),
+    [show, connected, now, caption, frameUrl, lastEvent, webhooks, suggestions],
   );
 }

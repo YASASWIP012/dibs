@@ -16,7 +16,9 @@ export interface CohostStep {
 export type Proposal =
   | { id: string; kind: "refund"; lot: number; amountCents: number; captureId: string; handle: string; label: string }
   | { id: string; kind: "release"; lot: number; handle: string; label: string }
-  | { id: string; kind: "remind"; lot: number; handle: string; buyerId: string; label: string };
+  | { id: string; kind: "remind"; lot: number; handle: string; buyerId: string; label: string }
+  | { id: string; kind: "relist"; lot: number; priceCents: number; label: string }
+  | { id: string; kind: "track"; lot: number; orderId: string; captureId: string; carrier: string; trackingNumber: string; label: string };
 
 export interface CohostAnswer {
   text: string;
@@ -44,10 +46,15 @@ const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 export function checkRefund(show: Show, lot: number, amountCents: number): { ok: true; captureId: string; handle: string; maxCents: number } | { ok: false; reason: string } {
   const l = show.lots.get(lot);
   if (!l) return { ok: false, reason: `There is no lot ${lot}.` };
-  const paid = show.claimsFor(lot).find((c) => c.status === "paid");
+  // a paid claim, or a late capture on a lot that already moved on (money to return)
+  const paid = show.claimsFor(lot).find((c) => {
+    const o = c.orderId ? show.orders.get(c.orderId) : undefined;
+    return o?.status === "captured" && (c.status === "paid" || Boolean(o.needsRefund?.includes(lot)));
+  });
   const order = paid?.orderId ? show.orders.get(paid.orderId) : undefined;
   if (!paid || !order || order.status !== "captured" || !order.captureId) return { ok: false, reason: `Lot ${lot} hasn't been paid, so there is nothing to refund.` };
-  const left = Math.min(l.price.cents, order.total.cents - (order.refundedCents ?? 0));
+  // capped per lot, and by what is left on the whole capture
+  const left = Math.min(l.price.cents - (order.refundedByLot?.[lot] ?? 0), order.total.cents - (order.refundedCents ?? 0));
   if (!Number.isInteger(amountCents) || amountCents <= 0) return { ok: false, reason: "The refund amount has to be more than zero." };
   if (amountCents > left) return { ok: false, reason: `Lot ${lot} can be refunded at most ${fmt(left)}.` };
   return { ok: true, captureId: order.captureId, handle: paid.handle, maxCents: left };
@@ -137,6 +144,17 @@ export class Cohost {
           return remember({ id: nanoid(10), kind: "refund", lot, amountCents: cents, captureId: c.captureId, handle: c.handle, label: `Refund ${fmt(cents)} to @${c.handle} for lot ${lot}` });
         },
       },
+      propose_tracking: {
+        description: "Propose adding shipping tracking to a paid lot's PayPal order so the buyer is notified. The seller confirms first.",
+        parameters: z.object({ lot: z.number().int().positive(), carrier: z.string().min(2).max(30).describe("e.g. USPS, UPS, FEDEX, DHL"), trackingNumber: z.string().min(6).max(40) }),
+        execute: async (a) => {
+          const { lot, carrier, trackingNumber } = a as { lot: number; carrier: string; trackingNumber: string };
+          const paid = show.claimsFor(lot).find((c) => c.status === "paid");
+          const order = paid?.orderId ? show.orders.get(paid.orderId) : undefined;
+          if (!paid || !order?.captureId) return { refused: `Lot ${lot} hasn't been paid yet.` };
+          return remember({ id: nanoid(10), kind: "track", lot, orderId: order.id, captureId: order.captureId, carrier: carrier.toUpperCase().replace(/[^A-Z_]/g, "_"), trackingNumber, label: `Add ${carrier.toUpperCase()} tracking ${trackingNumber} to lot ${lot} for @${paid.handle}` });
+        },
+      },
       propose_release: {
         description: "Propose ending an unpaid hold now so the lot goes to the next person in line.",
         parameters: z.object({ lot: z.number().int().positive() }),
@@ -216,7 +234,30 @@ export class Cohost {
    * Runs a proposal the seller confirmed. Everything is re-checked against the show at this
    * moment, because the show keeps moving between the proposal and the tap.
    */
-  async confirm(show: Show, id: string, act: { release: (lot: number) => void; remind: (buyerId: string, lot: number) => Promise<void> }): Promise<{ ok: boolean; text: string; refundId?: string }> {
+  /**
+   * Suggestions the co-host makes on its own while the show runs, from the clock rather than
+   * from a question: a reminder when a buyer is about to run out of time, a cheaper relist
+   * when a lot comes back with nobody waiting. Same rule as everything else: the seller confirms.
+   */
+  suggest(
+    show: Show,
+    s: { kind: "remind"; lot: number; handle: string; buyerId: string } | { kind: "relist"; lot: number; priceCents: number } | { kind: "refund"; lot: number; amountCents: number; captureId: string; handle: string },
+  ): Proposal {
+    const p: Proposal =
+      s.kind === "remind"
+        ? { id: nanoid(10), ...s, label: "@" + s.handle + " has 30 seconds left on lot " + s.lot + ". Send a reminder?" }
+        : s.kind === "relist"
+          ? { id: nanoid(10), ...s, label: "Nobody paid for lot " + s.lot + ". Relist it at " + fmt(s.priceCents) + "?" }
+          : { id: nanoid(10), ...s, label: "PayPal confirmed @" + s.handle + "'s payment for lot " + s.lot + " after it had moved on. Refund " + fmt(s.amountCents) + "?" };
+    this.proposals.set(p.id, { showId: show.id, p, at: Date.now() });
+    return p;
+  }
+
+  async confirm(
+    show: Show,
+    id: string,
+    act: { release: (lot: number) => void; remind: (buyerId: string, lot: number) => Promise<void>; relist?: (lot: number, priceCents: number) => void; track?: (orderId: string, captureId: string, trackingNumber: string, carrier: string) => Promise<string | undefined> },
+  ): Promise<{ ok: boolean; text: string; refundId?: string }> {
     const entry = this.proposals.get(id);
     if (!entry || entry.showId !== show.id) return { ok: false, text: "That proposal has expired." };
     this.proposals.delete(id);
@@ -227,14 +268,25 @@ export class Cohost {
       const raw = await this.createRefund.execute({ capture_id: c.captureId, amount: { value: (p.amountCents / 100).toFixed(2), currency_code: "USD" }, note_to_payer: `Refund for lot ${p.lot}` });
       const res = (typeof raw === "string" ? JSON.parse(raw) : raw) as { id?: string; status?: string; error?: unknown };
       if (!res?.id) return { ok: false, text: "PayPal didn't accept the refund." };
-      show.recordRefund(c.captureId, p.amountCents, res.id);
+      show.recordRefund(c.captureId, p.amountCents, res.id, p.lot);
       return { ok: true, text: `Refunded ${fmt(p.amountCents)} to @${p.handle} (${res.status ?? "sent"}).`, refundId: res.id };
     }
     if (p.kind === "release") {
       act.release(p.lot);
       return { ok: true, text: `Lot ${p.lot} moved on from @${p.handle}.` };
     }
+    if (p.kind === "track") {
+      if (!act.track) return { ok: false, text: "Tracking isn't available on this server." };
+      const status = await act.track(p.orderId, p.captureId, p.trackingNumber, p.carrier);
+      return { ok: true, text: "Tracking added to lot " + p.lot + (status ? " (" + status + ")" : "") + ". PayPal emails the buyer." };
+    }
+    if (p.kind === "relist") {
+      const lot = show.lots.get(p.lot);
+      if (!lot || lot.status !== "open") return { ok: false, text: "Lot " + p.lot + " isn't open any more." };
+      act.relist?.(p.lot, p.priceCents);
+      return { ok: true, text: "Lot " + p.lot + " is back up at " + fmt(p.priceCents) + "." };
+    }
     await act.remind(p.buyerId, p.lot);
-    return { ok: true, text: `Reminded @${p.handle}.` };
+    return { ok: true, text: "Reminded @" + p.handle + "." };
   }
 }

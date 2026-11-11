@@ -108,7 +108,7 @@ export function Studio() {
         </div>
         <div className="col-right">
           <ChatPanel show={show} />
-          <Cohost session={session} webhooks={live.webhooks} />
+          <Cohost session={session} webhooks={live.webhooks} suggestions={live.suggestions} />
         </div>
       </main>
     </div>
@@ -420,7 +420,8 @@ export function Recap({ show }: { show: ReturnType<typeof useShow>["show"] }) {
 type Proposal = { id: string; kind: string; label: string };
 type Turn = { q: string; a: string; steps: Array<{ tool: string; ok: boolean }>; proposals: Array<Proposal & { state?: "done" | "failed" | "busy"; note?: string }> };
 
-function Cohost({ session, webhooks }: { session: Session; webhooks: Array<{ text: string; at: number }> }) {
+function Cohost({ session, webhooks, suggestions = [] }: { session: Session; webhooks: Array<{ text: string; at: number }>; suggestions?: Proposal[] }) {
+  const [done, setDone] = useState<Record<string, { state: "busy" | "done" | "failed"; note?: string }>>({});
   const [q, setQ] = useState("");
   const [log, setLog] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -454,6 +455,43 @@ function Cohost({ session, webhooks }: { session: Session; webhooks: Array<{ tex
     <section className="panel-card">
       <div className="panel-head">Co-host</div>
       <div className="panel-body" style={{ display: "grid", gap: 10 }}>
+        {suggestions.length > 0 && (
+          <div style={{ display: "grid", gap: 6 }} aria-live="polite" aria-label="Co-host suggestions">
+            <span className="t-micro">Suggested by the co-host</span>
+            {suggestions.slice(-4).map((p) => {
+              const d = done[p.id];
+              return (
+                <div key={p.id} className="holder">
+                  <span className="grow" style={{ fontWeight: 600 }}>{p.label}</span>
+                  {d && d.state !== "busy" ? (
+                    <span className={`pill ${d.state === "done" ? "pill--sold" : "pill--lapsed"}`}>{d.note}</span>
+                  ) : (
+                    <>
+                      <button
+                        className="btn btn-ink btn-sm"
+                        disabled={d?.state === "busy"}
+                        onClick={async () => {
+                          setDone((x) => ({ ...x, [p.id]: { state: "busy" } }));
+                          try {
+                            const r = await api<{ ok: boolean; text: string }>(`/api/shows/${session.showId}/cohost/confirm`, { proposalId: p.id }, { "x-seller-key": session.sellerKey });
+                            setDone((x) => ({ ...x, [p.id]: { state: r.ok ? "done" : "failed", note: r.text } }));
+                          } catch (e) {
+                            setDone((x) => ({ ...x, [p.id]: { state: "failed", note: (e as Error).message } }));
+                          }
+                        }}
+                      >
+                        Confirm
+                      </button>
+                      <button className="btn btn-outline btn-sm" onClick={() => setDone((x) => ({ ...x, [p.id]: { state: "failed", note: "Skipped" } }))}>
+                        Skip
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div className="chips">
           {["Wrap up the show", "Who hasn't paid yet?", "Refund lot 1"].map((s) => (
             <button key={s} className="chip" onClick={() => ask(s)} disabled={busy}>
