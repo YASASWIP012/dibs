@@ -1,0 +1,24 @@
+/* Dibs brand layer on top of the foundation: cobalt mood, recolored toward the deep navy
+   and bright blue of the hackathon, with one lime highlight. */
+[data-accent="dibs"]{--accent:#0070E0;--accent-hi:#3D9BFF;--accent-ink:#0A3AA8;--on-accent:#fff;--focus:#0A3AA8}
+[data-mood="cobalt"]{
+  --navy:#0B1F4D; --navy-2:#102A66; --blue:#0070E0; --sky:#E8F1FF;
+  --live:#E5484D; --paid:#1F7A3D; --paid-wash:#E7F6EC; --wait:#B4690E; --wait-wash:#FFF4E0;
+  --wallpaper:radial-gradient(80% 70% at 50% 0%,#3D7BFF 0%,transparent 62%),radial-gradient(60% 50% at 90% 100%,rgba(212,245,60,.18) 0,transparent 60%),linear-gradient(160deg,#123A9C,#0B1F4D);
+  --wallpaper-soft:radial-gradient(80% 70% at 50% 0%,#E1ECFF 0%,transparent 60%),linear-gradient(160deg,#F3F7FF,#E6EEFF);
+}
+.hero--color{background:radial-gradient(120% 90% at 50% -10%,#2F6BFF 0%,#1240B8 45%,#0B1F4D 100%)}
+
+/* status pills used across the app */
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font:600 12px/1 var(--font-body);letter-spacing:.01em;white-space:nowrap}
+.pill--live{background:color-mix(in oklab,var(--live) 14%,#fff);color:#B42328}
+.pill--live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--live);animation:pulse 1.6s var(--ease-out) infinite}
+.pill--held{background:var(--wait-wash);color:var(--wait)}
+.pill--sold{background:var(--paid-wash);color:var(--paid)}
+.pill--open{background:var(--sky);color:var(--accent-ink)}
+.pill--lapsed{background:var(--tint);color:var(--ink-3);text-decoration:line-through}
+.pill--model{background:var(--sky);color:var(--accent-ink)}
+.pill--rules{background:var(--tint);color:var(--ink-3)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(229,72,77,.5)}70%{box-shadow:0 0 0 6px rgba(229,72,77,0)}100%{box-shadow:0 0 0 0 rgba(229,72,77,0)}}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes flash{0%{box-shadow:0 0 0 2px var(--marker),var(--shadow-2)}100%{box-shadow:var(--ring)}}
