@@ -297,3 +297,15 @@ describe("limits", () => {
     expect(last).toBe(429);
   });
 });
+
+describe("price questions", () => {
+  it("answers from the listing, without a claim", async () => {
+    const s = await showWithLot();
+    const ana = await join(s.showId, "ana");
+    await post(`/api/shows/${s.showId}/chat`, { token: ana.token, text: "price plz" });
+    await new Promise((r) => setTimeout(r, 50));
+    const show = built.rooms.get(s.showId)!.show;
+    expect(show.claimsFor(1)).toHaveLength(0);
+    expect(show.chat.find((m) => m.system && m.buyerId === ana.id)?.text).toContain("$40");
+  });
+});

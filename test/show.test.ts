@@ -203,3 +203,16 @@ describe("per-lot refund cap", () => {
     expect(checkRefund(show, 14, 4000)).toMatchObject({ ok: true });
   });
 });
+
+describe("phrasing from a real YouTube live sale", () => {
+  // read from the public chat of a live fabric sale on 11 Nov 2026, names dropped
+  const real: Array<[string, string]> = [
+    ["hold rkh do booking meri confrm h", "claim"],
+    ["kya rate h", "question"],
+    ["Delhi ki shipping kya hai mam", "question"],
+    ["price plz", "question"],
+    ["khadi me double bed ki dikha dijiye", "question"],
+    ["welcome dear", "chatter"],
+  ];
+  it.each(real)("%s → %s", (text, kind) => expect(readChatByRules(text).kind).toBe(kind));
+});

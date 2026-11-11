@@ -83,7 +83,14 @@ Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
 | Co-host refund | Asked "refund 15 dollars on lot 1", the co-host proposed it and nothing moved. After Confirm: refund `38E52394V7107161L` of $15.00 on capture `2UY924655E8922244`, COMPLETED. |
 | Guard | Asked to refund $100 on the same lot, the proposal was refused in code ("Lot 1 can be refunded at most $25.00."), because $15 of its $40 had already gone back. |
 
-61 automated tests (`npm test`), across the domain, the HTTP server with a fake PayPal, and the YouTube reader with a fake YouTube API:
+Real YouTube Live sales, read on 11 November 2026 through Dibs' YouTube reader (public chat, read-only, no names kept):
+
+- Three sellers were live at the time: a fabric shop, a clothing shop and a cosmetics shop. One had pinned "contact WhatsApp to place your order" in its chat, which is the manual process Dibs replaces.
+- In 40 consecutive messages from the fabric sale, buyers wrote in Hinglish: "hold rkh do booking meri confrm h" (keep it for me, I'm booking it), "kya rate h" (what's the price), "khadi me double bed ki dikha dijiye" (show me the double bed one in khadi). Three were claims and ten were questions, three of them about price.
+- Keyword rules alone first caught 3 claims and 2 questions. Gemini caught 8 questions, and those lines became new test cases for the rules, which now agree with Gemini on 32 of the 40.
+- Price questions were common enough that Dibs now answers them from the listing, in the buyer's language.
+
+68 automated tests (`npm test`), across the domain, the HTTP server with a fake PayPal, and the YouTube reader with a fake YouTube API:
 
 - claims, the claim order, double claims, handles that collide
 - the clock: rollover, early release by the seller, no rollover in the middle of a capture
@@ -94,7 +101,8 @@ Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
 - buyer tokens: public ids rejected, tokens absent from the public snapshot
 - webhooks: unverified ignored, duplicates applied once, refunds read from the capture link
 - refund guard: unpaid lots, zero amounts, anything over the captured amount, and a second refund of the same lot in a two-lot order refused
-- chat rules in English, Spanish, Hindi, French, German, Portuguese, Japanese and Chinese
+- chat rules in English, Spanish, Hindi, French, German, Portuguese, Japanese and Chinese, plus Hinglish phrasing taken from a real live sale
+- price questions answered from the listing without creating a claim
 - the translation guard keeps prices, handles and times
 
 TypeScript runs in strict mode with `noUncheckedIndexedAccess`; CI type-checks, tests and builds on every push.

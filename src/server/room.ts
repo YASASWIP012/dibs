@@ -5,6 +5,7 @@ import type { Buyer, Claim, ClaimReading, ShowEvent } from "./domain/types.js";
 import type { Ai } from "./ai/gemini.js";
 import type { Cohost, Proposal } from "./ai/cohost.js";
 import { YouTubeChat, videoIdFrom } from "./youtube.js";
+import { PRICE_QUESTION } from "./domain/rulesParser.js";
 import type { OrderLine } from "./paypal/paypal.js";
 
 /** The slice of PayPal a room needs. The real one is paypal/paypal.ts; tests pass a fake. */
@@ -116,6 +117,7 @@ export class Room {
     if (reading.lang && reading.lang !== "und" && buyer.lang !== reading.lang) buyer.lang = reading.lang;
     this.show.postChat({ buyerId: buyer.id, handle: buyer.handle, text: clean, reading, source });
     if (reading.kind === "claim") await this.applyClaim(buyer, clean, reading, receivedAt);
+    else if (reading.kind === "question" && PRICE_QUESTION.test(clean)) this.answerPrice(buyer, clean);
   }
 
   private async applyClaim(buyer: Buyer, text: string, reading: Extract<ClaimReading, { kind: "claim" }>, receivedAt: number) {
@@ -133,6 +135,15 @@ export class Room {
         else throw err;
       }
     }
+  }
+
+  /** "price plz", "kya rate h", "¿cuánto?": answered from the listing, so the seller can keep talking. */
+  private answerPrice(buyer: Buyer, text: string) {
+    const asked = Number(text.match(/\b(\d{1,3})\b/)?.[1] ?? NaN);
+    const lot = (Number.isFinite(asked) ? this.show.lots.get(asked) : undefined) ?? this.show.currentLot();
+    if (!lot || lot.price.cents <= 0) return;
+    const state = lot.status === "sold" ? " It's already sold." : lot.status === "held" ? " Someone's holding it, but you can join the line." : " Type “mine” to claim it.";
+    void this.reply(buyer, `@${buyer.handle} lot ${lot.number} (${lot.title}) is ${fmt(lot.price.cents)}.${state}`);
   }
 
   private confirmClaim(buyer: Buyer, claim: Claim) {

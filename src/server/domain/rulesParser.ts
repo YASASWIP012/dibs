@@ -14,13 +14,16 @@ const CLAIM_WORDS: Array<[RegExp, string]> = [
   [/\b(je prends|je le prends|je la prends|à moi|pour moi)\b/i, "fr"],
   [/\b(ich nehme|meins|nehm ich)\b/i, "de"],
   [/\b(eu quero|é meu|é minha)\b/i, "pt"],
-  [/(मेरा|मेरी|मुझे चाहिए|mera|meri|mujhe chahiye)/i, "hi"],
+  [/(मेरा|मेरी|मुझे चाहिए|\bmera\b|\bmeri\b|mujhe chahiye|\bchahiye\b|hold rak?h|\ble lung[ia]\b|book kar)/i, "hi"],
   [/(私の|ください|欲しい)/, "ja"],
   [/(我要|我的)/, "zh"],
   [/(🙋|✋|🙌|☝️|🖐)/u, "und"],
 ];
 
-const QUESTION = /(\?|¿|\b(how much|what size|price|size\??|is it|does it|cuánto|talla|combien|wie viel)\b)/i;
+const QUESTION = /(\?|¿|\b(how much|what size|price|rate|cost|size\??|is it|does it|cuánto|talla|combien|wie viel|kya|kitn[ae]|kitne ka|batao|batayi?e|dikha\w*|dijiye)\b)/i;
+
+/** Asking what something costs, in the ways people actually type it on live sales. */
+export const PRICE_QUESTION = /\b(price|how much|rate|cost|kitn[ae]|kitne ka|kya rate|cuánto|precio|combien|prix|wie viel|preço|quanto)\b|कितन|दाम|値段|多少钱/i;
 const NEGATION = /\b(not mine|no thanks|pass|nope|isn'?t mine|nevermind|never mind|cancel)\b/i;
 const LOT_NUMBER = /(?:#|lot\s*|no\.?\s*|number\s*|n[uú]mero\s*)?\b(\d{1,3})\b/gi;
 const SIZE = /\b(?:size\s*|talla\s*|taille\s*)?(XXS|XS|S|M|L|XL|XXL|\d{1,2}(?:\.5)?)\b/;
