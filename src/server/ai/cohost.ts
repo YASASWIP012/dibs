@@ -165,7 +165,7 @@ export class Cohost {
     const proposals: Proposal[] = [];
     const tools: Record<string, LocalTool> = { ...this.showTools(show, proposals), ...this.readTools };
     const declarations: FunctionDeclaration[] = Object.entries(tools).map(([name, t]) => {
-      const schema = zodToJsonSchema(t.parameters, { target: "openApi3", $refStrategy: "none" }) as Record<string, unknown>;
+      const schema = zodToJsonSchema(t.parameters, { target: "jsonSchema7", $refStrategy: "none" }) as Record<string, unknown>;
       delete schema.$schema;
       return { name, description: t.description.slice(0, 1000), parametersJsonSchema: schema };
     });

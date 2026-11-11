@@ -72,13 +72,14 @@ The model never decides who gets an item and never moves money. Its output is va
 
 ## Evidence
 
-Real sandbox run on 11 November 2026, through Dibs' own endpoints:
+Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
 
 | | |
 |---|---|
 | Order | `19Y34583SB393764D`, 2 lots, $65.00, approved by a US sandbox buyer |
 | Capture | `55L4149684291294L`, COMPLETED. A second capture call returned the same result without a new charge. |
-| Refund | $25.00 on lot 2 through the Agent Toolkit's `create_refund` |
+| Co-host refund | Asked "refund 15 dollars on lot 1", the co-host proposed it and nothing moved. After Confirm: refund `38E52394V7107161L` of $15.00 on capture `2UY924655E8922244`, COMPLETED. |
+| Guard | Asked to refund $100 on the same lot, the proposal was refused in code: "lot 1 can only be refunded up to $25.00". |
 
 44 automated tests (`npm test`), split between the domain and the HTTP server with a fake PayPal:
 
