@@ -129,7 +129,7 @@ describe("rules parser", () => {
   });
 });
 
-import { maskForTranslation, unmaskTranslation } from "../src/server/ai/gemini.js";
+import { keepsAmounts } from "../src/server/ai/gemini.js";
 import { checkRefund } from "../src/server/ai/cohost.js";
 
 describe("rules parser, more languages", () => {
@@ -151,16 +151,18 @@ describe("rules parser, more languages", () => {
 });
 
 describe("translation guard", () => {
-  it("keeps prices, handles and times out of the model's hands", () => {
-    const { masked, kept } = maskForTranslation("@kenji lot 2 is $28. Pay within 0:40.");
-    expect(masked).not.toContain("$28");
-    expect(kept).toEqual(["@kenji", "2", "$28", "0:40"]);
-    const back = unmaskTranslation(masked.replace("is", "es"), kept);
-    expect(back).toBe("@kenji lot 2 es $28. Pay within 0:40.");
+  it("accepts a translation that kept every price, handle, time and number", () => {
+    const en = "@kenji lot 2 (Ceramic table lamp, $28) is yours. Pay within 0:40 to keep it.";
+    expect(keepsAmounts("@kenji ロット2（セラミックテーブルランプ、$28）はあなたのものです。0:40以内に支払ってください。", en)).toBe(true);
   });
   it("rejects a translation that changed or dropped an amount", () => {
-    const { kept } = maskForTranslation("lot 2 is $28");
-    expect(unmaskTranslation("lote [[0]] es ¥4,200", kept)).toBeNull();
+    expect(keepsAmounts("el lote 2 cuesta ¥4,200", "lot 2 is $28")).toBe(false);
+    expect(keepsAmounts("el lote cuesta $28", "lot 2 is $28")).toBe(false);
+  });
+  it("rejects a translation that changed a lot number or a place in line", () => {
+    const en = "@priya you're number 2 in line for lot 1.";
+    expect(keepsAmounts("@priya लॉट 1 के लिए लाइन में आप नंबर 2 पर हैं।", en)).toBe(true);
+    expect(keepsAmounts("@priya लॉट 2 के लिए लाइन में आप नंबर 2 पर हैं।", en)).toBe(false);
   });
 });
 

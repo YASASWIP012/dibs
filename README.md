@@ -76,7 +76,7 @@ flowchart LR
 |---|---|---|
 | Read unclear chat lines (JSON: claim, question or chatter, lot numbers, language) | `gemini-3.5-flash-lite`, 2.5 s timeout | keyword rules |
 | Write a listing from the spoken words and a camera frame | `gemini-3.5-flash` | title from the spoken words |
-| Translate replies to each buyer. Prices, handles and times are swapped for placeholders first, and a translation that changes any of them is thrown away | `gemini-3.5-flash-lite` | English |
+| Translate replies to each buyer. A translation is used only if every price, handle, time and lot number in it matches the English exactly; otherwise the buyer gets the English | `gemini-3.5-flash-lite` | English |
 | Co-host function-calling loop with the PayPal Agent Toolkit | `gemini-3.5-flash` | the seller uses PayPal directly |
 
 The model never decides who gets an item and never moves money. Its output is validated with zod, and a low-confidence "claim" that the rules call chatter is treated as chatter.
@@ -101,7 +101,7 @@ Real YouTube Live sales, read on 11 November 2026 through Dibs' YouTube reader (
 - Price questions were common enough that Dibs now answers them from the listing, in the buyer's language.
 - Replayed through the Dibs engine with one lot up, those 40 messages give 1 item held for the first claimer, 2 more buyers in line, and 3 price questions answered automatically.
 
-71 automated tests (`npm test`), across the domain, the HTTP server with a fake PayPal, and the YouTube reader with a fake YouTube API:
+72 automated tests (`npm test`), across the domain, the HTTP server with a fake PayPal, and the YouTube reader with a fake YouTube API:
 
 - claims, the claim order, double claims, handles that collide
 - the clock: rollover, early release by the seller, no rollover in the middle of a capture
@@ -115,7 +115,7 @@ Real YouTube Live sales, read on 11 November 2026 through Dibs' YouTube reader (
 - refund guard: unpaid lots, zero amounts, anything over the captured amount, and a second refund of the same lot in a two-lot order refused
 - chat rules in English, Spanish, Hindi, French, German, Portuguese, Japanese and Chinese, plus Hinglish phrasing taken from a real live sale
 - price questions answered from the listing without creating a claim
-- the translation guard keeps prices, handles and times
+- the translation guard rejects any reply that changed a price, handle, time, lot number or place in line
 
 TypeScript runs in strict mode with `noUncheckedIndexedAccess`; CI type-checks, tests and builds on every push.
 

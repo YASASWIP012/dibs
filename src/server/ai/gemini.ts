@@ -87,16 +87,17 @@ export function readLotByRules(spoken: string): LotDraft {
 }
 
 /** Swaps prices, @handles, clock times and numbers for [[n]] placeholders a translation must keep. */
-export function maskForTranslation(text: string): { masked: string; kept: string[] } {
-  const kept: string[] = [];
-  const masked = text.replace(/\$\d+(?:\.\d{2})?|@[\w.-]+|\b\d+:\d{2}\b|\b\d+\b/g, (m) => `[[${kept.push(m) - 1}]]`);
-  return { masked, kept };
+/** Every price, handle, clock time and number in a message, in a fixed order. */
+export function amountsOf(text: string): string {
+  return (text.match(/\$\d+(?:\.\d{2})?|@[\w.-]+|\b\d+:\d{2}\b|\d+/g) ?? []).sort().join(",");
 }
 
-/** Puts the kept tokens back. Returns null when the translation dropped or repeated any of them. */
-export function unmaskTranslation(out: string, kept: string[]): string | null {
-  if (!out || !kept.every((_, i) => out.split(`[[${i}]]`).length === 2)) return null;
-  return out.replace(/\[\[(\d+)\]\]/g, (_, i) => kept[Number(i)] ?? "");
+/**
+ * A translation is used only if it kept every price, handle, time and number exactly as written.
+ * Otherwise the buyer gets the English, so a translation can never change an amount or a lot.
+ */
+export function keepsAmounts(translation: string, original: string): boolean {
+  return Boolean(translation) && amountsOf(translation) === amountsOf(original);
 }
 
 export class Ai {
@@ -241,17 +242,14 @@ export class Ai {
     const key = `tr:${lang}:${text}`;
     const hit = this.cached<string>(key);
     if (hit) return hit;
-    // Prices, handles, clock times and lot numbers are swapped for placeholders before the model
-    // sees the text and put back afterwards, so a translation can never change an amount.
-    const { masked, kept } = maskForTranslation(text);
     try {
       this.stats.calls++;
       const res = await withTimeout(
         this.client.models.generateContent({
           model: this.model,
-          contents: masked,
+          contents: text,
           config: {
-            systemInstruction: `Translate this short message for a live-sale viewer into the language with ISO code "${lang}". Copy every [[n]] placeholder exactly once, unchanged. Casual tone. Output only the translation.`,
+            systemInstruction: `Translate this short message for a live-sale viewer into the language with ISO code "${lang}". Keep every @handle, $price, clock time like 0:40 and number exactly as written, in the same digits. Casual tone. Output only the translation.`,
             temperature: 0,
             maxOutputTokens: 200,
             thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
@@ -259,9 +257,8 @@ export class Ai {
         }),
         4500,
       );
-      // every placeholder must come back exactly once, or we keep the English
-      const out = unmaskTranslation(res.text?.trim() ?? "", kept);
-      return out === null ? text : this.remember(key, out);
+      const out = res.text?.trim() ?? "";
+      return keepsAmounts(out, text) ? this.remember(key, out) : text;
     } catch (err) {
       this.stats.fallbacks++;
       this.stats.lastError = (err as Error).message.slice(0, 200);
