@@ -60,7 +60,13 @@ export function Room({ showId, embedded }: { showId: string; embedded?: boolean 
   return (
     <div className="room" style={embedded ? { minHeight: "100%" } : undefined}>
       <div className="cam" aria-label="Live video from the seller">
-        {frameUrl ? <img src={frameUrl} alt="Seller's live camera" /> : <div className="empty">Waiting for the seller's camera</div>}
+        {frameUrl ? (
+          <img src={frameUrl} alt="Seller's live camera" />
+        ) : current?.photo ? (
+          <img src={current.photo} alt={current.title} />
+        ) : (
+          <div className="empty">Waiting for the seller's camera</div>
+        )}
         <div className="overlay-top">
           <span className="pill pill--live">Live</span>
           <span className="pill" style={{ background: "rgba(5,12,32,.55)", color: "#fff" }}>

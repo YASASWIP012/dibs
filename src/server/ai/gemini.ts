@@ -228,23 +228,31 @@ export class Ai {
     const key = `tr:${lang}:${text}`;
     const hit = this.cached<string>(key);
     if (hit) return hit;
+    // Prices, handles, clock times and lot numbers are swapped for placeholders before the model
+    // sees the text and put back afterwards, so a translation can never change an amount.
+    const kept: string[] = [];
+    const masked = text.replace(/\$\d+(?:\.\d{2})?|@[\w.-]+|\b\d+:\d{2}\b|\b\d+\b/g, (m) => `[[${kept.push(m) - 1}]]`);
     try {
       this.stats.calls++;
       const res = await withTimeout(
         this.client.models.generateContent({
           model: this.model,
-          contents: text,
+          contents: masked,
           config: {
-            systemInstruction: `Translate this short message for a live-sale viewer into the language with ISO code "${lang}". Keep @handles, numbers, prices and links exactly. Casual tone. Output only the translation.`,
+            systemInstruction: `Translate this short message for a live-sale viewer into the language with ISO code "${lang}". Copy every [[n]] placeholder exactly once, unchanged. Casual tone. Output only the translation.`,
             temperature: 0,
             maxOutputTokens: 200,
             thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
           },
         }),
-        3000,
+        4500,
       );
-      const out = res.text?.trim();
-      return this.remember(key, out || text);
+      let out = res.text?.trim() ?? "";
+      // every placeholder must come back exactly once, or we keep the English
+      const ok = kept.every((_, i) => out.split(`[[${i}]]`).length === 2);
+      if (!out || !ok) return text;
+      out = out.replace(/\[\[(\d+)\]\]/g, (_, i) => kept[Number(i)] ?? "");
+      return this.remember(key, out);
     } catch (err) {
       this.stats.fallbacks++;
       this.stats.lastError = (err as Error).message.slice(0, 200);

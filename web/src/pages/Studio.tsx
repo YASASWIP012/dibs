@@ -353,7 +353,7 @@ export function ChatPanel({ show }: { show: ReturnType<typeof useShow>["show"] }
         {lines.map((m) => (
           <div key={m.id} className={`msg${m.system ? (m.handle === "paypal" ? " msg--paypal" : " msg--system") : ""}`}>
             <p className="msg__line">
-              <span className="msg__who">{m.system ? (m.handle === "paypal" ? "PayPal webhook" : `Dibs → @${show?.buyers.find((b) => b.id === m.buyerId)?.handle ?? ""}`) : `@${m.handle}`}</span>
+              <span className="msg__who">{m.system ? (m.handle === "paypal" ? "PayPal webhook" : "Dibs →") : `@${m.handle}`}</span>
               {m.text}
             </p>
             {m.reading && (
