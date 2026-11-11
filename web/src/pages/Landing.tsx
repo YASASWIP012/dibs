@@ -300,7 +300,7 @@ export function Landing() {
           <div className="grid grid-3">
             {[
               [icons.camera, "Say it, list it", "Hold the item up and say “lot three, leather bag, thirty five”. The camera frame and your words become a listing with an honest one-line description."],
-              [icons.spark, "A co-host you can talk to", "Ask “who hasn't paid?” or say “refund lot 2”. It reads the show and acts through the PayPal Agent Toolkit."],
+              [icons.spark, "A co-host that suggests, you confirm", "It nudges buyers about to run out of time, offers to relist what nobody paid for, and handles “refund lot 2” or tracking numbers through the PayPal Agent Toolkit. Nothing moves until you tap Confirm."],
               [icons.chat, "Live captions", "Buyers see what you're saying as you say it, which helps when they're watching on mute."],
               [icons.hook, "Real-time everywhere", "The studio and every phone share one clock from the server, so countdowns match to the second."],
               [icons.shield, "Fails safe", "If the model is slow or over quota, keyword rules take over. A bad read can never charge anyone; only PayPal's capture marks a sale."],
@@ -328,7 +328,7 @@ export function Landing() {
           <div className="faq">
             {[
               ["Is this real money?", "No. Dibs runs on the PayPal sandbox, so every payment is a test payment. The PayPal calls themselves are real: real orders, real captures, real webhooks."],
-              ["Does it work with Instagram or TikTok Live?", "Not yet. Their live comment APIs need app review, so today you run the show from the Dibs studio and share a link. Connecting YouTube Live chat and Instagram's live comments webhook is the next step."],
+              ["Does it work with YouTube, Instagram or TikTok Live?", "YouTube, yes: paste your live link and claims in your YouTube chat join the same line. Each YouTube buyer gets a 4-digit code you read out, which they type at your Dibs link to pay. Instagram's live comments need Meta app review, so Instagram sellers share the Dibs link for now."],
               ["What decides who gets an item?", "Plain code. The server records when each message arrives, and the first valid claim holds the item. The model only helps read messages; it never picks a winner or moves money."],
               ["What happens if a buyer pays late?", "If their hold ran out, Dibs refuses to capture the payment, so their PayPal account isn't charged, and they're told the item went to the next person."],
               ["Which AI does it use?", "Google Gemini, for reading chat, writing listings from the camera and your words, translating replies, and the co-host."],
