@@ -79,6 +79,7 @@ export function Studio() {
         <div className="col-left">
           <Camera session={session} socket={socket} caption={caption} />
           <LotComposer session={session} nextNumber={(show?.lots.reduce((m, l) => Math.max(m, l.number), 0) ?? 0) + 1} />
+          <YouTubeLink session={session} show={show} />
         </div>
         <div className="col-mid">
           <Recap show={show} />
@@ -91,7 +92,7 @@ export function Studio() {
             </div>
             <div className="panel-body">
               {show && show.lots.length > 0 ? (
-                <div className="board">
+                <div className="board" aria-live="polite" aria-relevant="additions text">
                   {[...show.lots]
                     .sort((a, b) => b.createdAt - a.createdAt)
                     .map((lot) => (
@@ -345,6 +346,61 @@ function LotComposer({ session, nextNumber }: { session: Session; nextNumber: nu
   );
 }
 
+function YouTubeLink({ session, show }: { session: Session; show: ReturnType<typeof useShow>["show"] }) {
+  const [url, setUrl] = useState("");
+  const [status, setStatus] = useState<{ state: string; error?: string; codes?: Record<string, string> }>({ state: "off" });
+  const [err, setErr] = useState<string | null>(null);
+  const headers = { "x-seller-key": session.sellerKey };
+  useEffect(() => {
+    if (status.state === "off") return;
+    const t = setInterval(() => {
+      api<typeof status>(`/api/shows/${session.showId}/youtube`, undefined, headers).then(setStatus).catch(() => undefined);
+    }, 3000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status.state, session.showId]);
+  const ytBuyers = (show?.buyers ?? []).filter((b) => (b as { source?: string }).source === "youtube");
+  return (
+    <section className="panel-card">
+      <div className="panel-head">
+        YouTube Live <span className="spacer" />
+        {status.state === "live" && <span className="pill pill--live">Reading chat</span>}
+        {status.state === "connecting" && <span className="pill pill--open">Connecting</span>}
+      </div>
+      <div className="panel-body" style={{ display: "grid", gap: 10 }}>
+        <p className="hint">Already streaming on YouTube? Paste the live link and claims in your YouTube chat count too.</p>
+        <form
+          className="row"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setErr(null);
+            try {
+              setStatus(await api(`/api/shows/${session.showId}/youtube`, { url }, headers));
+            } catch (e) {
+              setErr((e as Error).message);
+            }
+          }}
+        >
+          <input className="input grow" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://youtube.com/live/…" aria-label="YouTube Live link" />
+          <button className="btn btn-outline btn-sm">Connect</button>
+        </form>
+        {(err || status.error) && <p className="hint" style={{ color: "var(--live)" }}>{err ?? status.error}</p>}
+        {ytBuyers.length > 0 && (
+          <div style={{ display: "grid", gap: 6 }}>
+            <span className="t-micro">Read these codes out. Buyers type theirs at the buyer link to pay.</span>
+            {ytBuyers.map((b) => (
+              <div key={b.id} className="holder">
+                <span className="grow">@{b.handle}</span>
+                <span className="code t-mono" aria-label={`Claim code for ${b.handle}`}>{status.codes?.[b.id] ?? "····"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function ChatPanel({ show }: { show: ReturnType<typeof useShow>["show"] }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -368,6 +424,7 @@ export function ChatPanel({ show }: { show: ReturnType<typeof useShow>["show"] }
                   {m.reading.kind === "claim" ? `claim ${m.reading.lotNumbers.length ? m.reading.lotNumbers.map((n) => `#${n}`).join(" ") : "current lot"}` : m.reading.kind}
                 </span>
                 <span className="pill pill--rules">{m.reading.lang}</span>
+                {m.source === "youtube" && <span className="pill pill--live">YouTube</span>}
                 <span className={`pill ${m.reading.via === "model" ? "pill--model" : "pill--rules"}`}>{m.reading.via === "model" ? "read by Gemini" : "keyword rules"}</span>
               </div>
             )}

@@ -163,7 +163,9 @@ function JoinForm({ showId, onJoined }: { showId: string; onJoined: (b: Session)
   const [handle, setHandle] = useState("");
   const [lang, setLang] = useState(() => (navigator.language || "en").slice(0, 2));
   const [err, setErr] = useState<string | null>(null);
+  const [code, setCode] = useState("");
   return (
+    <>
     <form
       className="card"
       style={{ display: "grid", gap: 12 }}
@@ -195,5 +197,23 @@ function JoinForm({ showId, onJoined }: { showId: string; onJoined: (b: Session)
       {err && <p className="hint" style={{ color: "var(--live)" }}>{err}</p>}
       <button className="btn btn-candy" type="submit">Join</button>
     </form>
+    <form
+      className="row"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        try {
+          const { buyer } = await api<{ buyer: Session }>(`/api/shows/${showId}/join`, { code, lang });
+          onJoined(buyer);
+        } catch (e) {
+          setErr((e as Error).message);
+        }
+      }}
+    >
+      <input className="input grow" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" placeholder="Claimed on YouTube? Your 4-digit code" aria-label="YouTube claim code" />
+      <button className="btn btn-outline btn-sm" type="submit" disabled={code.length !== 4}>
+        Use code
+      </button>
+    </form>
+    </>
   );
 }

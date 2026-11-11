@@ -13,7 +13,7 @@ export function Countdown({ claim, now, holdMs }: { claim: Claim; now: number; h
   return (
     <>
       <span className={`ring${p < 0.25 ? " is-low" : ""}`} style={{ "--p": p } as React.CSSProperties} aria-hidden="true" />
-      <span className="t-mono" aria-label={`${Math.ceil(left / 1000)} seconds left to pay`}>
+      <span className="t-mono" role="timer" aria-label={`${Math.floor(left / 60000)} minutes ${Math.ceil((left % 60000) / 1000)} seconds left to pay`}>
         {clock(left)}
       </span>
     </>

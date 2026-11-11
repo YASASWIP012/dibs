@@ -4,6 +4,7 @@ import { Show, ShowError } from "./domain/show.js";
 import type { Buyer, Claim, ClaimReading, ShowEvent } from "./domain/types.js";
 import type { Ai } from "./ai/gemini.js";
 import type { Cohost, Proposal } from "./ai/cohost.js";
+import { YouTubeChat, videoIdFrom } from "./youtube.js";
 import type { OrderLine } from "./paypal/paypal.js";
 
 /** The slice of PayPal a room needs. The real one is paypal/paypal.ts; tests pass a fake. */
@@ -40,6 +41,8 @@ export class Room {
   /** Set when the server has a co-host; it watches the clock and suggests actions. */
   cohost?: Cohost;
   private readonly nudged = new Set<string>();
+  private youtube?: YouTubeChat;
+  youtubeStatus: { videoId?: string; state: "off" | "connecting" | "live" | "error"; error?: string } = { state: "off" };
   readonly suggestions: Proposal[] = [];
   private readonly peers = new Set<Peer>();
   private latestFrame?: Buffer;
@@ -98,20 +101,20 @@ export class Room {
   // ---------- chat → claims ----------
 
   /** Serialized for the whole show, so a slow model read can't let a later claim jump the line. */
-  handleChat(buyer: Buyer, text: string, receivedAt = Date.now()) {
-    const next = this.chatQueue.then(() => this.processChat(buyer, text, receivedAt)).catch(() => undefined);
+  handleChat(buyer: Buyer, text: string, receivedAt = Date.now(), source?: "youtube") {
+    const next = this.chatQueue.then(() => this.processChat(buyer, text, receivedAt, source)).catch(() => undefined);
     this.chatQueue = next;
     return next;
   }
 
-  private async processChat(buyer: Buyer, text: string, receivedAt: number) {
+  private async processChat(buyer: Buyer, text: string, receivedAt: number, source?: "youtube") {
     const clean = text.trim().slice(0, 280);
     if (!clean) return;
     const current = this.show.currentLot();
     const openLots = [...this.show.lots.values()].filter((l) => l.status !== "sold").map((l) => l.number);
     const reading = await this.ai.readChat(clean, { currentLot: current?.number, openLots });
     if (reading.lang && reading.lang !== "und" && buyer.lang !== reading.lang) buyer.lang = reading.lang;
-    this.show.postChat({ buyerId: buyer.id, handle: buyer.handle, text: clean, reading });
+    this.show.postChat({ buyerId: buyer.id, handle: buyer.handle, text: clean, reading, source });
     if (reading.kind === "claim") await this.applyClaim(buyer, clean, reading, receivedAt);
   }
 
@@ -158,6 +161,33 @@ export class Room {
   }
 
   /** Runs every half second. Expired holds roll to the next person, who hears about it in their language. */
+  /** Starts reading a YouTube Live chat into this show's claim queue. */
+  connectYouTube(url: string, apiKey: string, chat: YouTubeChat = new YouTubeChat(apiKey)) {
+    const videoId = videoIdFrom(url);
+    if (!videoId) throw new ShowError("lot_missing", "That doesn't look like a YouTube link.");
+    this.youtube?.stop();
+    this.youtube = chat;
+    this.youtubeStatus = { videoId, state: "connecting" };
+    void chat.run(
+      videoId,
+      (m) => {
+        this.youtubeStatus = { videoId, state: "live" };
+        const buyer = this.show.joinExternal("youtube", m.channelId, m.author);
+        void this.handleChat(buyer, m.text, Date.now(), "youtube");
+      },
+      (e) => {
+        this.youtubeStatus = { videoId, state: "error", error: e.message.slice(0, 160) };
+      },
+    );
+    return this.youtubeStatus;
+  }
+
+  disconnectYouTube() {
+    this.youtube?.stop();
+    this.youtube = undefined;
+    this.youtubeStatus = { state: "off" };
+  }
+
   private suggest(p: Proposal) {
     this.suggestions.push(p);
     if (this.suggestions.length > 30) this.suggestions.shift();

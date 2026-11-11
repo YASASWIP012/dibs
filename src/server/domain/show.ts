@@ -45,6 +45,10 @@ export class Show {
   readonly orders = new Map<string, PendingOrder>();
   readonly chat: ChatMessage[] = [];
   private readonly tokens = new Map<string, string>();
+  /** YouTube viewers: external channel id → buyer id, and their private claim code → buyer id. */
+  private readonly external = new Map<string, string>();
+  private readonly codes = new Map<string, string>();
+  private codeMisses: number[] = [];
   private readonly listeners = new Set<Listener>();
   private readonly now: () => number;
   holdMs: number;
@@ -112,6 +116,49 @@ export class Show {
     for (let n = 2; taken(clean); n++) clean = `${base.slice(0, 21)}${n}`;
     const buyer: Buyer = { id: nanoid(10), handle: clean, lang, joinedAt: this.now() };
     this.buyers.set(buyer.id, buyer);
+    const token = nanoid(32);
+    this.tokens.set(token, buyer.id);
+    return { ...buyer, token };
+  }
+
+  /**
+   * A viewer claiming from YouTube chat. They get a 4-digit claim code that only the seller
+   * sees; typing it in the Dibs room links that phone to their claims so they can pay.
+   */
+  joinExternal(source: "youtube", externalId: string, name: string): Buyer {
+    const known = this.external.get(`${source}:${externalId}`);
+    if (known) return this.buyers.get(known)!;
+    const session = this.join(name, "en");
+    const buyer = this.buyers.get(session.id)!;
+    buyer.source = source;
+    this.tokens.delete(session.token); // they have no Dibs session until they redeem their code
+    this.external.set(`${source}:${externalId}`, buyer.id);
+    let code: string;
+    do code = String(1000 + Math.floor(Math.random() * 9000));
+    while (this.codes.has(code));
+    this.codes.set(code, buyer.id);
+    return buyer;
+  }
+
+  /** Claim codes for the seller's screen, by buyer id. */
+  claimCodes(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [code, id] of this.codes) out[id] = code;
+    return out;
+  }
+
+  /** Swaps a claim code for a session. Wrong guesses are rate limited per show. */
+  redeemCode(code: string, lang = "en"): BuyerSession | undefined {
+    const now = this.now();
+    this.codeMisses = this.codeMisses.filter((t) => now - t < 60_000);
+    if (this.codeMisses.length >= 20) throw new ShowError("buyer_missing", "Too many wrong codes. Wait a minute and try again.");
+    const id = this.codes.get(code.trim());
+    const buyer = id ? this.buyers.get(id) : undefined;
+    if (!buyer) {
+      this.codeMisses.push(now);
+      return undefined;
+    }
+    buyer.lang = lang;
     const token = nanoid(32);
     this.tokens.set(token, buyer.id);
     return { ...buyer, token };

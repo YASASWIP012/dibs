@@ -19,6 +19,7 @@ const Env = z.object({
   DEMO_BUYER_EMAIL: z.string().optional(),
   DEMO_BUYER_PASSWORD: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  YOUTUBE_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
   GEMINI_VISION_MODEL: z.string().default("gemini-3.5-flash"),
   GEMINI_AGENT_MODEL: z.string().default("gemini-3.5-flash"),

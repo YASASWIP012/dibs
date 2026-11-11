@@ -31,6 +31,7 @@ const { app, tick } = await buildApp({
   cohost,
   paypalClientId: config.PAYPAL_CLIENT_ID,
   holdSeconds: config.HOLD_SECONDS,
+  youtubeKey: config.YOUTUBE_API_KEY,
   demoBuyer: config.DEMO_BUYER_EMAIL ? { email: config.DEMO_BUYER_EMAIL, password: config.DEMO_BUYER_PASSWORD } : undefined,
 });
 

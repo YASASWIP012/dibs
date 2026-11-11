@@ -22,6 +22,7 @@ export interface Deps {
   cohost?: Cohost;
   paypalClientId?: string;
   holdSeconds: number;
+  youtubeKey?: string;
   demoBuyer?: { email: string; password?: string };
   staticDir?: string;
   logger?: boolean;
@@ -143,8 +144,40 @@ export async function buildApp(deps: Deps): Promise<{ app: FastifyInstance; room
   });
 
   app.post("/api/shows/:id/join", async (req) => {
-    const { handle, lang } = z.object({ handle: z.string().min(1).max(24), lang: z.string().max(8).optional() }).parse(req.body);
-    return { buyer: room((req.params as { id: string }).id).show.join(handle, lang ?? "en") };
+    const body = z
+      .object({ handle: z.string().min(1).max(24).optional(), code: z.string().regex(/^\d{4}$/).optional(), lang: z.string().max(8).optional() })
+      .refine((b) => b.handle || b.code, "Give a name, or the code the seller read out")
+      .parse(req.body);
+    const show = room((req.params as { id: string }).id).show;
+    if (body.code) {
+      const buyer = show.redeemCode(body.code, body.lang ?? "en");
+      if (!buyer) throw forbidden("That code doesn't match anyone in this show");
+      return { buyer };
+    }
+    return { buyer: show.join(body.handle!, body.lang ?? "en") };
+  });
+
+  // ---------- YouTube Live ----------
+
+  app.post("/api/shows/:id/youtube", async (req) => {
+    const r = room((req.params as { id: string }).id);
+    requireSeller(r, req.headers["x-seller-key"]);
+    if (!deps.youtubeKey) throw new ShowError("lot_missing", "YouTube isn't set up on this server (YOUTUBE_API_KEY).");
+    const { url } = z.object({ url: z.string().min(5).max(200) }).parse(req.body);
+    return r.connectYouTube(url, deps.youtubeKey);
+  });
+
+  app.get("/api/shows/:id/youtube", async (req) => {
+    const r = room((req.params as { id: string }).id);
+    requireSeller(r, req.headers["x-seller-key"]);
+    return { ...r.youtubeStatus, codes: r.show.claimCodes() };
+  });
+
+  app.delete("/api/shows/:id/youtube", async (req) => {
+    const r = room((req.params as { id: string }).id);
+    requireSeller(r, req.headers["x-seller-key"]);
+    r.disconnectYouTube();
+    return r.youtubeStatus;
   });
 
   app.post("/api/shows/:id/chat", async (req) => {

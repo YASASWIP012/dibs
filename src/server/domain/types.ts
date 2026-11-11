@@ -40,6 +40,8 @@ export interface Buyer {
   handle: string;
   lang: string;
   joinedAt: number;
+  /** Where they're watching. YouTube viewers claim in YouTube chat and pay in Dibs with a code. */
+  source?: "dibs" | "youtube";
 }
 
 /** What the joining buyer gets back. The token is their only credential and never leaves the server again. */
@@ -74,6 +76,8 @@ export interface ChatMessage {
   reading?: ClaimReading;
   /** Replies from Dibs to this buyer, in their language. */
   system?: boolean;
+  /** Set for messages read from YouTube Live chat. */
+  source?: "youtube";
 }
 
 export type ClaimReading =

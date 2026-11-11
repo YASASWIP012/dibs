@@ -132,7 +132,7 @@ describe("checkout", () => {
     const { s, maria } = await holding();
     const { body: co } = await post(`/api/shows/${s.showId}/checkout`, { token: maria.token });
     const show = built.rooms.get(s.showId)!.show;
-    show.claimsFor(1)[0]!.deadline = Date.now() - 1;
+    show.holder(1)!.deadline = Date.now() - 1;
     built.tick();
     const cap = await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId: co.orderId });
     expect(cap.status).toBe(409);
@@ -149,7 +149,7 @@ describe("checkout", () => {
     const capturing = post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId: co.orderId });
     await settle();
     const show = built.rooms.get(s.showId)!.show;
-    show.claimsFor(1)[0]!.deadline = Date.now() - 1; // the clock runs out mid-capture
+    show.holder(1)!.deadline = Date.now() - 1; // the clock runs out mid-capture
     built.tick();
     expect(show.holder(1)?.handle).toBe("maria");
     pp.captureGate.release!();
@@ -166,7 +166,7 @@ describe("checkout", () => {
     expect(cap.status).toBe(409);
     const show = built.rooms.get(s.showId)!.show;
     expect(show.orders.get(co.orderId)?.status).toBe("denied");
-    expect(show.claimsFor(1)[0]?.capturing).toBe(false);
+    expect(show.claimsFor(1).find((c) => c.handle === "maria")?.capturing).toBe(false);
     expect(show.lots.get(1)?.status).toBe("held");
   });
 
@@ -251,7 +251,7 @@ describe("capture when PayPal is unreliable", () => {
     pp.captureThrows = true;
     pp.lookup = "throws";
     expect((await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId })).status).toBe(409);
-    show.claimsFor(1)[0]!.deadline = Date.now() - 1;
+    show.holder(1)!.deadline = Date.now() - 1;
     built.tick();
     expect(show.holder(1)?.handle).toBe("maria"); // not handed to jake while the outcome is unknown
   });
@@ -261,7 +261,7 @@ describe("capture when PayPal is unreliable", () => {
     pp.captureThrows = true;
     pp.lookup = "approved";
     expect((await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId })).status).toBe(500);
-    expect(show.claimsFor(1)[0]?.capturing).toBe(false);
+    expect(show.claimsFor(1).find((c) => c.handle === "maria")?.capturing).toBe(false);
   });
 
   it("treats a PENDING capture as reserved, not sold, until the webhook says so", async () => {
@@ -269,7 +269,7 @@ describe("capture when PayPal is unreliable", () => {
     pp.nextStatus = "PENDING";
     expect((await post(`/api/shows/${s.showId}/capture`, { token: maria.token, orderId })).status).toBe(200);
     expect(show.lots.get(1)?.status).toBe("held");
-    show.claimsFor(1)[0]!.deadline = Date.now() - 1;
+    show.holder(1)!.deadline = Date.now() - 1;
     built.tick();
     expect(show.holder(1)?.handle).toBe("maria");
     await post("/api/paypal/webhook", { id: "WH-P1", event_type: "PAYMENT.CAPTURE.COMPLETED", resource: { id: `CAP-${orderId}`, supplementary_data: { related_ids: { order_id: orderId } } } });
@@ -279,7 +279,7 @@ describe("capture when PayPal is unreliable", () => {
   it("never sells a lot twice when PayPal confirms after the lot moved on", async () => {
     const { orderId, show } = await ordered();
     // maria's hold lapses before anyone captured; jake now holds lot 1
-    show.claimsFor(1)[0]!.deadline = Date.now() - 1;
+    show.holder(1)!.deadline = Date.now() - 1;
     built.tick();
     expect(show.holder(1)?.handle).toBe("jake");
     // then PayPal reports maria's capture anyway

@@ -66,7 +66,7 @@ export function Demo() {
             <div className="panel-head">Seller's claim board</div>
             <div className="panel-body">
               {show && show.lots.length ? (
-                <div className="board">
+                <div className="board" aria-live="polite" aria-relevant="additions text">
                   {[...show.lots]
                     .sort((a, b) => b.createdAt - a.createdAt)
                     .map((l) => (

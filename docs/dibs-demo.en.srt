@@ -1,0 +1,95 @@
+1
+00:00:00,200 --> 00:00:04,520
+Every night, small sellers go live, and their chat looks like this.
+
+2
+00:00:04,700 --> 00:00:08,140
+Somebody types mine. Then four more people do.
+
+3
+00:00:10,300 --> 00:00:14,060
+The first one gets it. And then, they never pay.
+
+4
+00:00:16,300 --> 00:00:20,300
+The item sits on hold, and the next buyer has already left.
+
+5
+00:00:20,700 --> 00:00:27,420
+In the US, people bought fourteen point six billion dollars of goods on live video in 2025.
+
+6
+00:00:28,600 --> 00:00:32,760
+This is Dibs. It runs the sale, so the seller can keep selling.
+
+7
+00:00:37,400 --> 00:00:43,320
+Hold an item up and say what it is. Lot three, leather bag, thirty five.
+
+8
+00:00:43,800 --> 00:00:47,880
+Dibs hears the price, looks at the camera, and writes the listing.
+
+9
+00:00:52,400 --> 00:00:57,680
+Buyers claim it however they talk, in slang, emoji, Spanish or Hindi.
+
+10
+00:00:58,000 --> 00:01:02,783
+Clear claims are decided by plain rules, in the order the server heard them.
+
+11
+00:01:02,783 --> 00:01:07,440
+Gemini reads the messy ones, and answers each buyer in their own language.
+
+12
+00:01:11,400 --> 00:01:15,880
+Whoever was first gets a PayPal checkout on their phone, and a clock.
+
+13
+00:01:16,400 --> 00:01:24,240
+Jake doesn't pay. When his time runs out, the jacket moves to the next person in line, and Lucia hears about it in Spanish.
+
+14
+00:01:24,600 --> 00:01:27,920
+If Jake tries to pay late, Dibs refuses the capture.
+
+15
+00:01:27,920 --> 00:01:31,240
+Nobody pays for something that went to someone else.
+
+16
+00:01:36,400 --> 00:01:42,480
+Everything a buyer holds goes into one PayPal order, built with the PayPal server SDK.
+
+17
+00:01:43,000 --> 00:01:49,320
+Lucia pays. PayPal captures it, the webhook signature checks out, and the board turns green.
+
+18
+00:01:57,400 --> 00:02:01,131
+After the show, the seller just asks. Who hasn't paid?
+
+19
+00:02:01,131 --> 00:02:03,480
+Refund fifteen dollars on lot one.
+
+20
+00:02:03,800 --> 00:02:08,650
+The co-host proposes it, and nothing moves until the seller taps confirm.
+
+21
+00:02:08,650 --> 00:02:11,640
+Then PayPal's agent toolkit sends the refund.
+
+22
+00:02:13,400 --> 00:02:19,640
+All of this ran in the PayPal sandbox, with real orders, a real capture and a real refund.
+
+23
+00:02:21,000 --> 00:02:25,560
+There's one link for the seller and one for buyers, and nothing to install.
+
+24
+00:02:29,400 --> 00:02:33,400
+Dibs. Sell it live, and get paid before the next item.
