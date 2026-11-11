@@ -277,6 +277,18 @@ export class Show {
     return order;
   }
 
+  /** Records a refund PayPal already made (from the co-host or a webhook). Idempotent per refund id. */
+  private readonly seenRefunds = new Set<string>();
+  recordRefund(captureId: string, cents: number, refundId: string): PendingOrder | undefined {
+    if (this.seenRefunds.has(refundId)) return undefined;
+    const order = [...this.orders.values()].find((o) => o.captureId === captureId);
+    if (!order) return undefined;
+    this.seenRefunds.add(refundId);
+    order.refundedCents = Math.min(order.total.cents, (order.refundedCents ?? 0) + Math.max(0, Math.round(cents)));
+    this.emit({ type: "order.captured", order });
+    return order;
+  }
+
   // ---------- recap ----------
 
   recap() {
@@ -294,6 +306,7 @@ export class Show {
       rescuedLots: rescued.length,
       rescuedCents: cents(rescued.map((c) => this.lots.get(c.lotNumber)!).filter(Boolean)),
       buyers: new Set(claims.filter((c) => c.status === "paid").map((c) => c.buyerId)).size,
+      refundedCents: [...this.orders.values()].reduce((s, o) => s + (o.refundedCents ?? 0), 0),
     };
   }
 

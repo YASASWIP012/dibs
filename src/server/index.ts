@@ -154,7 +154,16 @@ app.post("/api/shows/:id/cohost", async (req) => {
   requireSeller(r, req.headers["x-seller-key"]);
   if (!cohost) return { text: "The co-host needs PayPal and Gemini keys on the server.", steps: [] };
   const { question } = z.object({ question: z.string().min(1).max(500) }).parse(req.body);
-  return cohost.ask(r.show, question);
+  const answer = await cohost.ask(r.show, question);
+  // keep the board honest about money the co-host sent back
+  for (const s of answer.steps) {
+    if (s.tool !== "create_refund" || !s.ok) continue;
+    const args = s.args as { capture_id?: string; amount?: { value?: string } };
+    const res = (typeof s.result === "string" ? JSON.parse(s.result) : s.result) as { id?: string; amount?: { value?: string } } | undefined;
+    const value = Number(res?.amount?.value ?? args.amount?.value ?? 0);
+    if (args.capture_id && res?.id) r.show.recordRefund(args.capture_id, Math.round(value * 100), res.id);
+  }
+  return { text: answer.text, steps: answer.steps.map(({ tool, ok }) => ({ tool, ok })) };
 });
 
 // ---------- judge mode ----------

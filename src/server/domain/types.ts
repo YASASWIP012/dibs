@@ -50,6 +50,7 @@ export interface PendingOrder {
   status: OrderStatus;
   createdAt: number;
   captureId?: string;
+  refundedCents?: number;
 }
 
 export interface ChatMessage {

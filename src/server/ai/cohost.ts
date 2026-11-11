@@ -8,6 +8,7 @@ export interface CohostStep {
   tool: string;
   args: unknown;
   ok: boolean;
+  result?: unknown;
 }
 
 export interface CohostAnswer {
@@ -127,7 +128,7 @@ export class Cohost {
         } catch (err) {
           result = { error: (err as Error).message.slice(0, 300) };
         }
-        steps.push({ tool: name, args: call.args, ok });
+        steps.push({ tool: name, args: call.args, ok, result });
         responses.push({ functionResponse: { id: call.id, name, response: { result } } });
       }
       contents.push({ role: "user", parts: responses });
