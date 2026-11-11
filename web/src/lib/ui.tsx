@@ -31,7 +31,8 @@ export function LotCard({ lot, show, now, fresh }: { lot: Lot; show: Snapshot; n
   const waiting = claims.filter((c) => c.status === "waiting");
   const lapsed = claims.filter((c) => c.status === "lapsed");
   return (
-    <article className={`lot${fresh ? " is-new" : ""}`} aria-label={`Lot ${lot.number}, ${lot.title}`}>
+    <article className="lot" aria-label={`Lot ${lot.number}, ${lot.title}`}>
+      {fresh ? <span className="lot__flash" aria-hidden="true" /> : null}
       <div className="lot__img">{lot.photo ? <img src={lot.photo} alt={lot.title} /> : <span>{lot.number}</span>}</div>
       <span className="lot__num">#{lot.number}</span>
       <span className="lot__status">
