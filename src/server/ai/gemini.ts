@@ -86,6 +86,19 @@ export function readLotByRules(spoken: string): LotDraft {
   };
 }
 
+/** Swaps prices, @handles, clock times and numbers for [[n]] placeholders a translation must keep. */
+export function maskForTranslation(text: string): { masked: string; kept: string[] } {
+  const kept: string[] = [];
+  const masked = text.replace(/\$\d+(?:\.\d{2})?|@[\w.-]+|\b\d+:\d{2}\b|\b\d+\b/g, (m) => `[[${kept.push(m) - 1}]]`);
+  return { masked, kept };
+}
+
+/** Puts the kept tokens back. Returns null when the translation dropped or repeated any of them. */
+export function unmaskTranslation(out: string, kept: string[]): string | null {
+  if (!out || !kept.every((_, i) => out.split(`[[${i}]]`).length === 2)) return null;
+  return out.replace(/\[\[(\d+)\]\]/g, (_, i) => kept[Number(i)] ?? "");
+}
+
 export class Ai {
   private readonly client?: GoogleGenAI;
   private readonly cache = new Map<string, unknown>();
@@ -230,8 +243,7 @@ export class Ai {
     if (hit) return hit;
     // Prices, handles, clock times and lot numbers are swapped for placeholders before the model
     // sees the text and put back afterwards, so a translation can never change an amount.
-    const kept: string[] = [];
-    const masked = text.replace(/\$\d+(?:\.\d{2})?|@[\w.-]+|\b\d+:\d{2}\b|\b\d+\b/g, (m) => `[[${kept.push(m) - 1}]]`);
+    const { masked, kept } = maskForTranslation(text);
     try {
       this.stats.calls++;
       const res = await withTimeout(
@@ -247,12 +259,9 @@ export class Ai {
         }),
         4500,
       );
-      let out = res.text?.trim() ?? "";
       // every placeholder must come back exactly once, or we keep the English
-      const ok = kept.every((_, i) => out.split(`[[${i}]]`).length === 2);
-      if (!out || !ok) return text;
-      out = out.replace(/\[\[(\d+)\]\]/g, (_, i) => kept[Number(i)] ?? "");
-      return this.remember(key, out);
+      const out = unmaskTranslation(res.text?.trim() ?? "", kept);
+      return out === null ? text : this.remember(key, out);
     } catch (err) {
       this.stats.fallbacks++;
       this.stats.lastError = (err as Error).message.slice(0, 200);

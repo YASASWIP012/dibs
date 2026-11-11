@@ -128,3 +128,63 @@ describe("rules parser", () => {
     expect(r.kind === "claim" && r.size).toBe("M");
   });
 });
+
+import { maskForTranslation, unmaskTranslation } from "../src/server/ai/gemini.js";
+import { checkRefund } from "../src/server/ai/cohost.js";
+
+describe("rules parser, more languages", () => {
+  const more: Array<[string, string, number[]]> = [
+    ["je prends le 16 taille M", "fr", [16]],
+    ["ich nehme 4", "de", [4]],
+    ["eu quero o 2", "pt", [2]],
+    ["2番ください", "ja", [2]],
+    ["我要 7", "zh", [7]],
+  ];
+  it.each(more)("%s → claim in %s", (text, lang, lots) => {
+    const r = readChatByRules(text);
+    expect(r.kind).toBe("claim");
+    if (r.kind === "claim") {
+      expect(r.lang).toBe(lang);
+      expect(r.lotNumbers).toEqual(lots);
+    }
+  });
+});
+
+describe("translation guard", () => {
+  it("keeps prices, handles and times out of the model's hands", () => {
+    const { masked, kept } = maskForTranslation("@kenji lot 2 is $28. Pay within 0:40.");
+    expect(masked).not.toContain("$28");
+    expect(kept).toEqual(["@kenji", "2", "$28", "0:40"]);
+    const back = unmaskTranslation(masked.replace("is", "es"), kept);
+    expect(back).toBe("@kenji lot 2 es $28. Pay within 0:40.");
+  });
+  it("rejects a translation that changed or dropped an amount", () => {
+    const { kept } = maskForTranslation("lot 2 is $28");
+    expect(unmaskTranslation("lote [[0]] es ¥4,200", kept)).toBeNull();
+  });
+});
+
+describe("hold release and refunds", () => {
+  it("lets the seller end an unpaid hold early", () => {
+    const { show, maria, jake } = setup();
+    show.claim(jake.id, 14, "mine", "en");
+    show.claim(maria.id, 14, "yo quiero", "es");
+    show.releaseHold(14);
+    expect(show.holder(14)?.handle).toBe("maria");
+  });
+
+  it("only allows refunds of paid lots, up to what was captured", () => {
+    const { show, jake } = setup();
+    show.claim(jake.id, 14, "mine", "en");
+    expect(checkRefund(show, 14, 1000).ok).toBe(false);
+    show.recordOrder("O-1", jake.id, show.payable(jake.id));
+    show.markCaptured("O-1", "CAP-1");
+    expect(checkRefund(show, 14, 5000)).toMatchObject({ ok: false });
+    expect(checkRefund(show, 14, 0)).toMatchObject({ ok: false });
+    expect(checkRefund(show, 14, 2500)).toMatchObject({ ok: true, captureId: "CAP-1" });
+    show.recordRefund("CAP-1", 2500, "R-1");
+    show.recordRefund("CAP-1", 2500, "R-1"); // same refund reported twice
+    expect(checkRefund(show, 14, 2000)).toMatchObject({ ok: false });
+    expect(checkRefund(show, 14, 1500)).toMatchObject({ ok: true });
+  });
+});

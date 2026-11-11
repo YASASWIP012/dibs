@@ -45,8 +45,8 @@ export function Studio() {
     });
   }, [session]);
 
-  const start = async (holdSeconds: number) => {
-    const s = await api<Session>("/api/shows", { holdSeconds });
+  const start = async (holdSeconds: number, payeeEmail?: string) => {
+    const s = await api<Session>("/api/shows", { holdSeconds, payeeEmail });
     localStorage.setItem("dibs:studio", JSON.stringify(s));
     setSession(s);
   };
@@ -115,8 +115,9 @@ export function Studio() {
   );
 }
 
-function StartShow({ onStart }: { onStart: (holdSeconds: number) => void }) {
+function StartShow({ onStart }: { onStart: (holdSeconds: number, payeeEmail?: string) => void }) {
   const [hold, setHold] = useState(120);
+  const [payee, setPayee] = useState("");
   return (
     <div className="app" style={{ display: "grid", placeItems: "center", padding: 24 }}>
       <div className="card card--raised" style={{ maxWidth: 440, width: "100%", display: "grid", gap: 16, padding: 28 }}>
@@ -135,7 +136,12 @@ function StartShow({ onStart }: { onStart: (holdSeconds: number) => void }) {
             ))}
           </div>
         </div>
-        <button className="btn btn-candy btn-lg" onClick={() => onStart(hold)}>
+        <label className="field">
+          Your PayPal email (sandbox)
+          <input className="input" type="email" value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="you@business.example.com" aria-describedby="payee-hint" />
+          <span id="payee-hint" className="t-micro">Buyers' payments go straight to this account. Leave it empty to use the demo account.</span>
+        </label>
+        <button className="btn btn-candy btn-lg" onClick={() => onStart(hold, payee.trim() || undefined)}>
           Start a show
         </button>
         <p className="t-micro">Runs on the PayPal sandbox. No real money moves.</p>
@@ -411,21 +417,37 @@ export function Recap({ show }: { show: ReturnType<typeof useShow>["show"] }) {
   );
 }
 
+type Proposal = { id: string; kind: string; label: string };
+type Turn = { q: string; a: string; steps: Array<{ tool: string; ok: boolean }>; proposals: Array<Proposal & { state?: "done" | "failed" | "busy"; note?: string }> };
+
 function Cohost({ session, webhooks }: { session: Session; webhooks: Array<{ text: string; at: number }> }) {
   const [q, setQ] = useState("");
-  const [log, setLog] = useState<Array<{ q: string; a: string; steps: Array<{ tool: string; ok: boolean }> }>>([]);
+  const [log, setLog] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
+  const headers = { "x-seller-key": session.sellerKey };
   const ask = async (question: string) => {
     if (!question.trim()) return;
     setBusy(true);
     setQ("");
     try {
-      const res = await api<{ text: string; steps: Array<{ tool: string; ok: boolean }> }>(`/api/shows/${session.showId}/cohost`, { question }, { "x-seller-key": session.sellerKey });
-      setLog((l) => [...l, { q: question, a: res.text, steps: res.steps }]);
+      const res = await api<Omit<Turn, "q" | "a"> & { text: string }>(`/api/shows/${session.showId}/cohost`, { question }, headers);
+      setLog((l) => [...l, { q: question, a: res.text, steps: res.steps, proposals: res.proposals }]);
     } catch (e) {
-      setLog((l) => [...l, { q: question, a: (e as Error).message, steps: [] }]);
+      setLog((l) => [...l, { q: question, a: (e as Error).message, steps: [], proposals: [] }]);
     } finally {
       setBusy(false);
+    }
+  };
+  const decide = async (turn: number, p: Proposal, go: boolean) => {
+    const set = (patch: Partial<Turn["proposals"][number]>) =>
+      setLog((l) => l.map((t, i) => (i !== turn ? t : { ...t, proposals: t.proposals.map((x) => (x.id === p.id ? { ...x, ...patch } : x)) })));
+    if (!go) return set({ state: "failed", note: "Skipped" });
+    set({ state: "busy" });
+    try {
+      const r = await api<{ ok: boolean; text: string }>(`/api/shows/${session.showId}/cohost/confirm`, { proposalId: p.id }, headers);
+      set({ state: r.ok ? "done" : "failed", note: r.text });
+    } catch (e) {
+      set({ state: "failed", note: (e as Error).message });
     }
   };
   return (
@@ -433,7 +455,7 @@ function Cohost({ session, webhooks }: { session: Session; webhooks: Array<{ tex
       <div className="panel-head">Co-host</div>
       <div className="panel-body" style={{ display: "grid", gap: 10 }}>
         <div className="chips">
-          {["Who hasn't paid yet?", "How much did we make?", "Refund lot 1"].map((s) => (
+          {["Wrap up the show", "Who hasn't paid yet?", "Refund lot 1"].map((s) => (
             <button key={s} className="chip" onClick={() => ask(s)} disabled={busy}>
               {s}
             </button>
@@ -457,6 +479,23 @@ function Cohost({ session, webhooks }: { session: Session; webhooks: Array<{ tex
                 ))}
               </div>
             )}
+            {x.proposals.map((p) => (
+              <div key={p.id} className="holder" style={{ marginTop: 6 }}>
+                <span className="grow" style={{ fontWeight: 600 }}>{p.label}</span>
+                {p.state === "done" || p.state === "failed" ? (
+                  <span className={`pill ${p.state === "done" ? "pill--sold" : "pill--lapsed"}`}>{p.note}</span>
+                ) : (
+                  <>
+                    <button className="btn btn-ink btn-sm" disabled={p.state === "busy"} onClick={() => decide(i, p, true)}>
+                      {p.state === "busy" ? "…" : "Confirm"}
+                    </button>
+                    <button className="btn btn-outline btn-sm" disabled={p.state === "busy"} onClick={() => decide(i, p, false)}>
+                      Skip
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         ))}
         <form
@@ -466,15 +505,16 @@ function Cohost({ session, webhooks }: { session: Session; webhooks: Array<{ tex
             void ask(q);
           }}
         >
-          <input className="input grow" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask or tell it to do something" aria-label="Ask the co-host" />
+          <input className="input grow" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask, or tell it what to do" aria-label="Ask the co-host" />
           <button className="btn btn-ink btn-sm" disabled={busy}>
             {busy ? "…" : "Ask"}
           </button>
         </form>
+        <p className="t-micro">It can look anything up. Money and the line only change when you press Confirm.</p>
         {webhooks.length > 0 && (
           <div className="creds" aria-label="Recent PayPal webhooks">
-            {webhooks.slice(0, 4).map((w, i) => (
-              <div key={i}>{w.text}</div>
+            {webhooks.slice(0, 4).map((w, k) => (
+              <div key={k}>{w.text}</div>
             ))}
           </div>
         )}

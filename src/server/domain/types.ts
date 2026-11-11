@@ -31,6 +31,8 @@ export interface Claim {
   /** Payment must be captured before this time or the lot moves to the next person in line. */
   deadline?: number;
   orderId?: string;
+  /** Set while PayPal is capturing this claim's order, so the clock can't hand the lot on mid-capture. */
+  capturing?: boolean;
 }
 
 export interface Buyer {
@@ -40,7 +42,12 @@ export interface Buyer {
   joinedAt: number;
 }
 
-export type OrderStatus = "created" | "captured" | "rejected";
+/** What the joining buyer gets back. The token is their only credential and never leaves the server again. */
+export interface BuyerSession extends Buyer {
+  token: string;
+}
+
+export type OrderStatus = "created" | "capturing" | "captured" | "denied";
 
 export interface PendingOrder {
   id: string;

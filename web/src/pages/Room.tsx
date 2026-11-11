@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, LANGS, money, type Buyer } from "../lib/api";
+
+type Session = Buyer & { token: string };
 import { useShow } from "../lib/useShow";
 import { Countdown, Logo, PayButtons } from "../lib/ui";
 
-function savedBuyer(showId: string): Buyer | null {
+function savedBuyer(showId: string): Session | null {
   try {
     return JSON.parse(localStorage.getItem(`dibs:buyer:${showId}`) ?? "null");
   } catch {
@@ -12,7 +14,7 @@ function savedBuyer(showId: string): Buyer | null {
 }
 
 export function Room({ showId, embedded }: { showId: string; embedded?: boolean }) {
-  const [buyer, setBuyer] = useState<Buyer | null>(() => savedBuyer(showId));
+  const [buyer, setBuyer] = useState<Session | null>(() => savedBuyer(showId));
   const live = useShow(showId, "buyer", { buyerId: buyer?.id });
   const { show, now, frameUrl, caption } = live;
   const [text, setText] = useState("");
@@ -42,7 +44,7 @@ export function Room({ showId, embedded }: { showId: string; embedded?: boolean 
   const send = async (msg: string) => {
     if (!buyer || !msg.trim()) return;
     setText("");
-    await api(`/api/shows/${showId}/chat`, { buyerId: buyer.id, text: msg }).catch((e) => setToast(e.message));
+    await api(`/api/shows/${showId}/chat`, { token: buyer.token, text: msg }).catch((e) => setToast(e.message));
   };
 
   if (!show) {
@@ -122,7 +124,7 @@ export function Room({ showId, embedded }: { showId: string; embedded?: boolean 
                   <b className="grow">Pay for {holding.length === 1 ? "your item" : `${holding.length} items`}</b>
                   <span className="t-mono">{money(holdingTotal)}</span>
                 </div>
-                <PayButtons showId={showId} buyerId={buyer.id} holdingKey={holdingKey} onPaid={() => setToast("Paid. The seller has it.")} onError={setToast} />
+                <PayButtons showId={showId} token={buyer.token} holdingKey={holdingKey} onPaid={() => setToast("Paid. The seller has it.")} onError={setToast} />
               </div>
             )}
 
@@ -157,7 +159,7 @@ export function Room({ showId, embedded }: { showId: string; embedded?: boolean 
   );
 }
 
-function JoinForm({ showId, onJoined }: { showId: string; onJoined: (b: Buyer) => void }) {
+function JoinForm({ showId, onJoined }: { showId: string; onJoined: (b: Session) => void }) {
   const [handle, setHandle] = useState("");
   const [lang, setLang] = useState(() => (navigator.language || "en").slice(0, 2));
   const [err, setErr] = useState<string | null>(null);
@@ -168,7 +170,7 @@ function JoinForm({ showId, onJoined }: { showId: string; onJoined: (b: Buyer) =
       onSubmit={async (e) => {
         e.preventDefault();
         try {
-          const { buyer } = await api<{ buyer: Buyer }>(`/api/shows/${showId}/join`, { handle, lang });
+          const { buyer } = await api<{ buyer: Session }>(`/api/shows/${showId}/join`, { handle, lang });
           onJoined(buyer);
         } catch (e) {
           setErr((e as Error).message);

@@ -3,7 +3,13 @@ import type { WebSocket } from "ws";
 import { Show, ShowError } from "./domain/show.js";
 import type { Buyer, Claim, ClaimReading, ShowEvent } from "./domain/types.js";
 import type { Ai } from "./ai/gemini.js";
-import type { PayPal } from "./paypal/paypal.js";
+import type { OrderLine } from "./paypal/paypal.js";
+
+/** The slice of PayPal a room needs. The real one is paypal/paypal.ts; tests pass a fake. */
+export interface Payments {
+  createOrder(showId: string, buyerHandle: string, lines: OrderLine[], requestId: string, payeeEmail?: string): Promise<{ id: string; status?: string }>;
+  captureOrder(orderId: string): Promise<{ status?: string; captureId?: string }>;
+}
 
 type Role = "seller" | "buyer" | "watch";
 interface Peer {
@@ -36,8 +42,10 @@ export class Room {
   constructor(
     holdMs: number,
     private readonly ai: Ai,
-    private readonly paypal?: PayPal,
+    private readonly paypal?: Payments,
     id?: string,
+    /** The seller's own PayPal account. Unset, payments go to the app's account (fine for the sandbox demo). */
+    readonly payeeEmail?: string,
   ) {
     this.show = new Show({ holdMs, id });
     this.show.on((e) => this.broadcast(e));
@@ -102,42 +110,55 @@ export class Room {
 
   private async applyClaim(buyer: Buyer, text: string, reading: Extract<ClaimReading, { kind: "claim" }>, receivedAt: number) {
     const lots = reading.lotNumbers.length ? reading.lotNumbers : [this.show.currentLot()?.number].filter((n): n is number => n !== undefined);
-    if (lots.length === 0) return this.reply(buyer, "Nothing is up for sale yet. Hang tight.");
+    if (lots.length === 0) {
+      void this.reply(buyer, "Nothing is up for sale yet. Hang tight.");
+      return;
+    }
     for (const n of lots) {
       try {
         const claim = this.show.claim(buyer.id, n, text, reading.lang, receivedAt);
-        await this.confirmClaim(buyer, claim);
+        this.confirmClaim(buyer, claim);
       } catch (err) {
-        if (err instanceof ShowError) await this.reply(buyer, err.code === "lot_missing" ? `There's no lot ${n}.` : `Lot ${n} is already sold.`);
+        if (err instanceof ShowError) void this.reply(buyer, err.code === "lot_missing" ? `There's no lot ${n}.` : `Lot ${n} is already sold.`);
         else throw err;
       }
     }
   }
 
-  private async confirmClaim(buyer: Buyer, claim: Claim) {
+  private confirmClaim(buyer: Buyer, claim: Claim) {
     const lot = this.show.lots.get(claim.lotNumber)!;
     if (claim.status === "holding") {
-      await this.reply(buyer, `@${buyer.handle} lot ${lot.number} (${lot.title}, ${fmt(lot.price.cents)}) is yours. Pay within ${mmss(this.show.holdMs)} to keep it.`);
+      void this.reply(buyer, `@${buyer.handle} lot ${lot.number} (${lot.title}, ${fmt(lot.price.cents)}) is yours. Pay within ${mmss(this.show.holdMs)} to keep it.`);
     } else {
       const pos = this.show.waitlist(claim.lotNumber).findIndex((c) => c.id === claim.id) + 1;
-      await this.reply(buyer, `@${buyer.handle} you're number ${pos} in line for lot ${lot.number}. If it isn't paid in time, it's yours.`);
+      void this.reply(buyer, `@${buyer.handle} you're number ${pos} in line for lot ${lot.number}. If it isn't paid in time, it's yours.`);
     }
   }
 
-  async reply(buyer: Buyer, text: string) {
-    const translated = await this.ai.translate(text, buyer.lang);
-    this.show.postChat({ buyerId: buyer.id, handle: "dibs", text: translated, system: true });
+  /**
+   * Replies are translated off the chat queue, so a slow model call never delays the next
+   * claim. Each buyer's replies still arrive in the order they were written.
+   */
+  private readonly replyQueue = new Map<string, Promise<unknown>>();
+  reply(buyer: Buyer, text: string): Promise<unknown> {
+    const prev = this.replyQueue.get(buyer.id) ?? Promise.resolve();
+    const next = prev
+      .then(() => this.ai.translate(text, buyer.lang))
+      .then((translated) => this.show.postChat({ buyerId: buyer.id, handle: "dibs", text: translated, system: true }))
+      .catch(() => undefined);
+    this.replyQueue.set(buyer.id, next);
+    return next;
   }
 
   /** Runs every half second. Expired holds roll to the next person, who hears about it in their language. */
-  async tick() {
+  tick() {
     for (const { lapsed, next } of this.show.tick()) {
       const lot = this.show.lots.get(lapsed.lotNumber)!;
       const lapsedBuyer = this.show.buyers.get(lapsed.buyerId);
-      if (lapsedBuyer) await this.reply(lapsedBuyer, `Time ran out on lot ${lot.number}, so it went to the next person in line.`);
+      if (lapsedBuyer) void this.reply(lapsedBuyer, `Time ran out on lot ${lot.number}, so it went to the next person in line.`);
       const nextBuyer = next && this.show.buyers.get(next.buyerId);
       if (nextBuyer) {
-        await this.reply(nextBuyer, `@${nextBuyer.handle} good news: lot ${lot.number} (${lot.title}, ${fmt(lot.price.cents)}) is yours now. Pay within ${mmss(this.show.holdMs)}.`);
+        void this.reply(nextBuyer, `@${nextBuyer.handle} good news: lot ${lot.number} (${lot.title}, ${fmt(lot.price.cents)}) is yours now. Pay within ${mmss(this.show.holdMs)}.`);
       }
     }
   }
@@ -152,20 +173,29 @@ export class Room {
     if (claims.length === 0) throw new ShowError("nothing_to_pay", "You're not holding anything right now");
     const lines = claims.map((claim) => ({ claim, lot: this.show.lots.get(claim.lotNumber)! }));
     const requestId = `${this.show.id}-${buyerId}-${claims.map((c) => c.id).sort().join("-")}`.slice(0, 100);
-    const { id } = await this.paypal.createOrder(this.show.id, buyer.handle, lines, requestId);
+    const { id } = await this.paypal.createOrder(this.show.id, buyer.handle, lines, requestId, this.payeeEmail);
     const existing = this.show.orders.get(id);
     return existing ?? this.show.recordOrder(id, buyerId, claims);
   }
 
   async capture(orderId: string) {
     if (!this.paypal) throw new ShowError("order_missing", "PayPal is not configured");
-    const order = this.show.assertCapturable(orderId);
+    const order = this.show.beginCapture(orderId);
     if (order.status === "captured") return order;
-    const res = await this.paypal.captureOrder(orderId);
-    if (res.status !== "COMPLETED") throw new Error(`Capture status ${res.status}`);
+    let res: { status?: string; captureId?: string };
+    try {
+      res = await this.paypal.captureOrder(orderId);
+    } catch (err) {
+      this.show.failCapture(orderId);
+      throw err;
+    }
+    if (res.status !== "COMPLETED") {
+      this.show.failCapture(orderId, res.status === "DECLINED" ? "denied" : "created");
+      throw new ShowError("order_stale", "PayPal didn't complete the payment. Nothing was charged.");
+    }
     const done = this.show.markCaptured(orderId, res.captureId);
     const buyer = this.show.buyers.get(done.buyerId);
-    if (buyer) await this.reply(buyer, `Paid, thank you. ${fmt(done.total.cents)} received. The seller will ship it soon.`);
+    if (buyer) void this.reply(buyer, `Paid, thank you. ${fmt(done.total.cents)} received. The seller will ship it soon.`);
     return done;
   }
 }

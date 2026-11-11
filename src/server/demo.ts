@@ -23,8 +23,12 @@ export const DEMO_LOTS: DemoLot[] = [
 
 type Step = { at: number; run: (room: Room) => void | Promise<void> };
 
+const bots = new WeakMap<Room, Map<string, ReturnType<Room["show"]["join"]>>>();
 function bot(room: Room, handle: string, lang: string, text: string) {
-  const buyer = room.show.join(handle, lang);
+  let m = bots.get(room);
+  if (!m) bots.set(room, (m = new Map()));
+  let buyer = m.get(handle);
+  if (!buyer) m.set(handle, (buyer = room.show.join(handle, lang)));
   return room.handleChat(buyer, text);
 }
 

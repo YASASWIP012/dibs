@@ -1,0 +1,24 @@
+# One web service: Fastify serves the API, the WebSocket and the built React app.
+services:
+  - type: web
+    name: dibs
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: PUBLIC_URL
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEMO_BUYER_EMAIL
+        sync: false
+      - key: DEMO_BUYER_PASSWORD
+        sync: false

@@ -1,0 +1,375 @@
+{
+ "info": {
+  "name": "Dibs API",
+  "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+  "description": "Live-sale claims that get paid. PayPal sandbox only."
+ },
+ "variable": [
+  {
+   "key": "base",
+   "value": "http://localhost:8787"
+  },
+  {
+   "key": "showId",
+   "value": ""
+  },
+  {
+   "key": "sellerKey",
+   "value": ""
+  },
+  {
+   "key": "buyerToken",
+   "value": ""
+  },
+  {
+   "key": "orderId",
+   "value": ""
+  },
+  {
+   "key": "proposalId",
+   "value": ""
+  }
+ ],
+ "item": [
+  {
+   "name": "Start a show",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows"
+     ]
+    },
+    "description": "Returns showId and sellerKey. Save both as variables.",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"holdSeconds\": 120,\n  \"payeeEmail\": \"seller@business.example.com\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Put a lot up (seller)",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "x-seller-key",
+      "value": "{{sellerKey}}"
+     },
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}/lots",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}",
+      "lots"
+     ]
+    },
+    "description": "",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"title\": \"Denim trucker jacket\",\n  \"priceCents\": 4000,\n  \"number\": 1\n}"
+    }
+   }
+  },
+  {
+   "name": "Put a lot up from speech (seller)",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "x-seller-key",
+      "value": "{{sellerKey}}"
+     },
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}/lots",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}",
+      "lots"
+     ]
+    },
+    "description": "Gemini writes the listing; price and number come from the words.",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"spoken\": \"lot two, green ceramic lamp, twenty eight\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Join as a buyer",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}/join",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}",
+      "join"
+     ]
+    },
+    "description": "Returns buyer.token. Save it as buyerToken.",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"handle\": \"maria\",\n  \"lang\": \"es\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Claim in chat",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}/chat",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}",
+      "chat"
+     ]
+    },
+    "description": "",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"token\": \"{{buyerToken}}\",\n  \"text\": \"yo quiero el 1\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Show state",
+   "request": {
+    "method": "GET",
+    "header": [],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}"
+     ]
+    },
+    "description": ""
+   }
+  },
+  {
+   "name": "Checkout (creates a PayPal order)",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}/checkout",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}",
+      "checkout"
+     ]
+    },
+    "description": "",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"token\": \"{{buyerToken}}\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Capture after approval",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}/capture",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}",
+      "capture"
+     ]
+    },
+    "description": "409 if the hold ran out before capture.",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"token\": \"{{buyerToken}}\",\n  \"orderId\": \"{{orderId}}\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Ask the co-host (seller)",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "x-seller-key",
+      "value": "{{sellerKey}}"
+     },
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}/cohost",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}",
+      "cohost"
+     ]
+    },
+    "description": "Returns proposals; nothing changes until confirmed.",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"question\": \"Wrap up the show\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Confirm a proposal (seller)",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "x-seller-key",
+      "value": "{{sellerKey}}"
+     },
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/shows/{{showId}}/cohost/confirm",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "shows",
+      "{{showId}}",
+      "cohost",
+      "confirm"
+     ]
+    },
+    "description": "",
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"proposalId\": \"{{proposalId}}\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Judge-mode show",
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": {
+     "raw": "{{base}}/api/demo",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "demo"
+     ]
+    },
+    "description": "",
+    "body": {
+     "mode": "raw",
+     "raw": "{}"
+    }
+   }
+  },
+  {
+   "name": "Health",
+   "request": {
+    "method": "GET",
+    "header": [],
+    "url": {
+     "raw": "{{base}}/api/health",
+     "host": [
+      "{{base}}"
+     ],
+     "path": [
+      "api",
+      "health"
+     ]
+    },
+    "description": ""
+   }
+  }
+ ]
+}

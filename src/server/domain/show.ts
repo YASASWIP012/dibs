@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import type {
   Buyer,
+  BuyerSession,
   ChatMessage,
   Claim,
   Lot,
@@ -43,6 +44,7 @@ export class Show {
   readonly buyers = new Map<string, Buyer>();
   readonly orders = new Map<string, PendingOrder>();
   readonly chat: ChatMessage[] = [];
+  private readonly tokens = new Map<string, string>();
   private readonly listeners = new Set<Listener>();
   private readonly now: () => number;
   holdMs: number;
@@ -102,12 +104,23 @@ export class Show {
 
   // ---------- buyers & chat ----------
 
-  join(handle: string, lang = "en"): Buyer {
-    const clean = handle.trim().replace(/^@/, "").slice(0, 24) || "guest";
-    for (const b of this.buyers.values()) if (b.handle.toLowerCase() === clean.toLowerCase()) return b;
+  /** Joins a buyer. Handles are unique per show, so a taken handle gets a number on the end. */
+  join(handle: string, lang = "en"): BuyerSession {
+    const base = handle.trim().replace(/^@/, "").replace(/[^\p{L}\p{N}_.-]/gu, "").slice(0, 24) || "guest";
+    let clean = base;
+    const taken = (h: string) => [...this.buyers.values()].some((b) => b.handle.toLowerCase() === h.toLowerCase());
+    for (let n = 2; taken(clean); n++) clean = `${base.slice(0, 21)}${n}`;
     const buyer: Buyer = { id: nanoid(10), handle: clean, lang, joinedAt: this.now() };
     this.buyers.set(buyer.id, buyer);
-    return buyer;
+    const token = nanoid(32);
+    this.tokens.set(token, buyer.id);
+    return { ...buyer, token };
+  }
+
+  /** The buyer a secret token belongs to. Public buyer ids are never accepted for actions. */
+  buyerByToken(token: string | undefined): Buyer | undefined {
+    const id = token ? this.tokens.get(token) : undefined;
+    return id ? this.buyers.get(id) : undefined;
   }
 
   postChat(message: Omit<ChatMessage, "id" | "at"> & { at?: number }): ChatMessage {
@@ -189,7 +202,7 @@ export class Show {
     const at = this.now();
     const out: Array<{ lapsed: Claim; next?: Claim }> = [];
     for (const claim of this.claims.values()) {
-      if (claim.status !== "holding" || claim.deadline === undefined || claim.deadline > at) continue;
+      if (claim.status !== "holding" || claim.capturing || claim.deadline === undefined || claim.deadline > at) continue;
       claim.status = "lapsed";
       const next = this.waitlist(claim.lotNumber)[0];
       if (next) {
@@ -205,6 +218,15 @@ export class Show {
       out.push({ lapsed: claim, next });
     }
     return out;
+  }
+
+  /** Ends an unpaid hold now (seller's call); the next tick passes the lot down the line. */
+  releaseHold(lotNumber: number): Claim | undefined {
+    const h = this.claimsFor(lotNumber).find((c) => c.status === "holding");
+    if (!h) return undefined;
+    h.deadline = this.now();
+    this.tick();
+    return h;
   }
 
   // ---------- checkout ----------
@@ -245,6 +267,7 @@ export class Show {
     const order = this.orders.get(orderId);
     if (!order) throw new ShowError("order_missing", "Unknown order");
     if (order.status === "captured") return order;
+    if (order.status === "capturing") throw new ShowError("order_stale", "This payment is already going through");
     const at = this.now();
     for (const id of order.claimIds) {
       const c = this.claims.get(id);
@@ -253,6 +276,33 @@ export class Show {
       }
     }
     return order;
+  }
+
+  /**
+   * Locks the order's claims while PayPal captures, so a hold can't lapse to the next buyer in
+   * the middle of a capture that then succeeds (which would sell the lot twice).
+   */
+  beginCapture(orderId: string): PendingOrder {
+    const order = this.assertCapturable(orderId);
+    if (order.status === "captured") return order;
+    order.status = "capturing";
+    for (const id of order.claimIds) {
+      const c = this.claims.get(id);
+      if (c) c.capturing = true;
+    }
+    return order;
+  }
+
+  /** Capture failed or was denied: unlock, and let the clock carry on from where it was. */
+  failCapture(orderId: string, status: "created" | "denied" = "created"): void {
+    const order = this.orders.get(orderId);
+    if (!order || order.status === "captured") return;
+    order.status = status;
+    for (const id of order.claimIds) {
+      const c = this.claims.get(id);
+      if (c) c.capturing = false;
+    }
+    this.emit({ type: "order.created", order });
   }
 
   /** Idempotent: a second call with the same order (browser + webhook) changes nothing. */
@@ -265,6 +315,7 @@ export class Show {
     for (const id of order.claimIds) {
       const c = this.claims.get(id);
       if (!c) continue;
+      c.capturing = false;
       c.status = "paid";
       const lot = this.lots.get(c.lotNumber);
       if (lot) {

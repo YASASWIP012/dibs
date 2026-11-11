@@ -105,7 +105,7 @@ function loadPayPal(clientId: string) {
  * time, so the total always matches what they hold right now; capture is refused on the server
  * if a hold ran out while the PayPal window was open.
  */
-export function PayButtons({ showId, buyerId, holdingKey, onPaid, onError }: { showId: string; buyerId: string; holdingKey: string; onPaid: () => void; onError: (m: string) => void }) {
+export function PayButtons({ showId, token, holdingKey, onPaid, onError }: { showId: string; token: string; holdingKey: string; onPaid: () => void; onError: (m: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<"loading" | "ready" | "off">("loading");
   const cb = useRef({ onPaid, onError });
@@ -122,10 +122,10 @@ export function PayButtons({ showId, buyerId, holdingKey, onPaid, onError }: { s
       ref.current.innerHTML = "";
       buttons = window.paypal.Buttons({
         style: { layout: "vertical", shape: "pill", label: "pay", height: 46 },
-        createOrder: async () => (await api<{ orderId: string }>(`/api/shows/${showId}/checkout`, { buyerId })).orderId,
+        createOrder: async () => (await api<{ orderId: string }>(`/api/shows/${showId}/checkout`, { token })).orderId,
         onApprove: async (data: { orderID: string }) => {
           try {
-            await api(`/api/shows/${showId}/capture`, { orderId: data.orderID });
+            await api(`/api/shows/${showId}/capture`, { token, orderId: data.orderID });
             cb.current.onPaid();
           } catch (e) {
             cb.current.onError(e instanceof ApiError && e.status === 409 ? "Time ran out while you were paying, so the item went to the next person. You were not charged." : (e as Error).message);
@@ -140,7 +140,7 @@ export function PayButtons({ showId, buyerId, holdingKey, onPaid, onError }: { s
       cancelled = true;
       buttons?.close().catch(() => undefined);
     };
-  }, [showId, buyerId, holdingKey]);
+  }, [showId, token, holdingKey]);
 
   return (
     <div>

@@ -43,7 +43,7 @@ export class PayPal {
   }
 
   /** One order per buyer, one line per lot they hold. customId ties it back to the show. */
-  async createOrder(showId: string, buyerHandle: string, lines: OrderLine[], requestId: string) {
+  async createOrder(showId: string, buyerHandle: string, lines: OrderLine[], requestId: string, payeeEmail?: string) {
     const total = lines.reduce((s, l) => s + l.lot.price.cents, 0);
     const res = await this.orders.createOrder({
       paypalRequestId: requestId,
@@ -56,6 +56,8 @@ export class PayPal {
             customId: `${showId}:${buyerHandle}`.slice(0, 127),
             description: `Live sale ${showId}`,
             softDescriptor: "DIBS LIVE",
+            // the seller's own PayPal account receives the money when they gave one
+            payee: payeeEmail ? { emailAddress: payeeEmail } : undefined,
             amount: {
               currencyCode: "USD",
               value: usd(total),

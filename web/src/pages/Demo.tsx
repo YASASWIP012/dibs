@@ -21,8 +21,10 @@ export function Demo() {
   const { show, now } = live;
 
   useEffect(() => {
-    api<{ showId: string }>("/api/demo", {}).then((r) => setShowId(r.showId));
-    api<Config>("/api/config").then(setCfg);
+    api<{ showId: string; demoBuyer: Config["demoBuyer"] }>("/api/demo", {}).then((r) => {
+      setShowId(r.showId);
+      setCfg({ paypalClientId: null, demoBuyer: r.demoBuyer });
+    });
   }, []);
 
   const me = useMemo(() => {
