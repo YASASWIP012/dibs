@@ -4,6 +4,7 @@ import { Ai } from "./ai/gemini.js";
 import { Cohost } from "./ai/cohost.js";
 import { PayPal } from "./paypal/paypal.js";
 import { buildApp } from "./app.js";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const WEBHOOK_EVENTS = [
   "CHECKOUT.ORDER.APPROVED",
@@ -16,6 +17,16 @@ const WEBHOOK_EVENTS = [
 ];
 
 const ai = new Ai(config.GEMINI_API_KEY, config.GEMINI_MODEL, config.GEMINI_VISION_MODEL);
+
+// Judge mode's scripted viewers always say the same things, so their replies are translated
+// ahead of time (src/server/ai/demo-translations.json). Run with DIBS_SAVE_TRANSLATIONS=<file>
+// and play judge mode a few times to refresh that file.
+const translationsFile = new URL("./ai/demo-translations.json", import.meta.url);
+if (existsSync(translationsFile)) ai.seedTranslations(JSON.parse(readFileSync(translationsFile, "utf8")));
+if (process.env.DIBS_SAVE_TRANSLATIONS) {
+  const out = process.env.DIBS_SAVE_TRANSLATIONS;
+  setInterval(() => writeFileSync(out, JSON.stringify(ai.translations(), null, 1) + "\n"), 2000).unref();
+}
 const paypal = paypalReady ? new PayPal({ clientId: config.PAYPAL_CLIENT_ID!, clientSecret: config.PAYPAL_CLIENT_SECRET! }) : undefined;
 const cohost =
   paypalReady && config.GEMINI_API_KEY

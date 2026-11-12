@@ -113,6 +113,31 @@ export class Ai {
     return Boolean(this.client);
   }
 
+  /**
+   * Translations made ahead of time for judge mode's scripted viewers, so a slow free-tier call
+   * never turns a buyer's reply back into English. Each one passed the same amount check.
+   */
+  seedTranslations(entries: Record<string, Record<string, string>>) {
+    let n = 0;
+    for (const [lang, byText] of Object.entries(entries))
+      for (const [text, out] of Object.entries(byText))
+        if (keepsAmounts(out, text)) {
+          this.cache.set(`tr:${lang}:${text}`, out);
+          n++;
+        }
+    return n;
+  }
+
+  /** Every translation this process made, by language. Used to refresh the judge-mode file. */
+  translations(): Record<string, Record<string, string>> {
+    const out: Record<string, Record<string, string>> = {};
+    for (const [key, value] of this.cache) {
+      const m = /^tr:([^:]+):([\s\S]*)$/.exec(key);
+      if (m && typeof value === "string") (out[m[1]!] ??= {})[m[2]!] = value;
+    }
+    return out;
+  }
+
   private cached<T>(key: string): T | undefined {
     if (this.cache.has(key)) {
       this.stats.cacheHits++;

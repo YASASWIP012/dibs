@@ -262,3 +262,20 @@ describe("checkout grace", () => {
     expect(held.deadline).toBe(after);
   });
 });
+
+describe("judge-mode translations", () => {
+  it("are used without a model call, and only if they kept every amount", async () => {
+    const { Ai } = await import("../src/server/ai/gemini.js");
+    const ai = new Ai("fake-key", "m");
+    const n = ai.seedTranslations({ es: { "lot 2 is $28": "el lote 2 cuesta $28", "lot 3 is $35": "el lote 3 cuesta ¥5,000" } });
+    expect(n).toBe(1);
+    expect(await ai.translate("lot 2 is $28", "es")).toBe("el lote 2 cuesta $28");
+    expect(ai.stats.calls).toBe(0);
+  });
+  it("ship with every entry passing the amount check", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { keepsAmounts } = await import("../src/server/ai/gemini.js");
+    const file = JSON.parse(readFileSync(new URL("../src/server/ai/demo-translations.json", import.meta.url), "utf8")) as Record<string, Record<string, string>>;
+    for (const byText of Object.values(file)) for (const [en, out] of Object.entries(byText)) expect(keepsAmounts(out, en)).toBe(true);
+  });
+});

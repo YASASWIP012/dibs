@@ -6,6 +6,10 @@ Dibs is for small resellers who sell on live video. It reads the chat, holds eac
 
 Built for the PayPal AI Hackathon. Everything runs on the PayPal sandbox; no real money moves.
 
+![Judge mode on the live site: @jake didn't pay for the jacket, so it moved to @lucia, with @priya next in line. Replies go out in each buyer's language.](docs/judge-mode.jpg)
+
+*Judge mode on the live site, captured 12 Nov 2026: @jake let the jacket's clock run out, so it moved to @lucia with @priya next. Each reply is in the buyer's language.*
+
 | | |
 |---|---|
 | Live app | https://dibs-1j5d.onrender.com |
@@ -27,7 +31,24 @@ Tools for this exist (CommentSold, SoldLive), but they charge a monthly fee, sit
 | Unpaid claims | chased by hand | reminders | platform rules | clock, then the next person in line, automatically |
 | Money lands in | seller's account | seller's store | the platform first | seller's own PayPal |
 
-The demo show in the video was staged by the builder. No real seller has used Dibs yet.
+### Sellers already run this by hand
+
+Live sellers publish their own rules for it, and they describe the job Dibs does:
+
+- A live crystal seller tells buyers that "15% - 20% of orders per week go unpaid", asks for payment within 24 hours of the invoice, then cancels unpaid claims and blocks the buyer ([Forgotten Rarities, live sale rules](https://www.forgottenrarities.com/pages/live-sale-rules-and-info)).
+- Another gives the item to the first claim that shows up on the host's screen, sends PayPal invoices within a day, and cancels any invoice not paid in 24 hours ([The Crystal Apothecary Co](https://thecrystalapothecaryco.com/facebook-and-instagram-live-sales/)).
+- A Facebook live-sale group makes PayPal the only way to invoice, requires sellers to invoice in the order claims were posted, and to offer a released item to whoever is next in line ([Dressed to Impress group rules](https://anniewearsit.com/dressed-to-impress-group-rules/)).
+
+Who claimed first, a PayPal request, a deadline, and the next person in line: Dibs does those four steps while the show is still running, instead of a day later.
+
+### What's real and what's staged
+
+| Real | Staged |
+|---|---|
+| PayPal sandbox orders, captures, refunds and webhooks, with the IDs listed under [Evidence](#evidence) | The show in the video and in judge mode: the seller and the other viewers are the builder and scripted bots |
+| Gemini reading chat, writing listings and translating replies, live in judge mode | |
+| YouTube Live chat read from real public sales | No seller has used Dibs yet |
+| Everything in the video's screens exists in the app; the screens were rebuilt for the video so they stay legible at video size | |
 
 ## 60 seconds for judges
 
@@ -49,23 +70,23 @@ flowchart LR
   H -->|pays in time| O[PayPal Orders v2: create, approve, capture]
   H -->|clock runs out| N[Next in line gets the hold, message in their language]
   O --> W[Webhook, signature verified] --> B[Board turns green]
-  B --> K[Co-host: proposes refunds, releases, reminders] -->|seller confirms| A[PayPal Agent Toolkit]
+  B --> K[Co-host: reads PayPal through the Agent Toolkit, proposes refunds, releases, reminders] -->|seller confirms| A[PayPal refund API, idempotent]
 ```
 
 1. The seller says what the item is: "Lot three, leather bag, thirty five." The browser's speech recognition hears it, Dibs grabs a camera frame, and Gemini writes a short title and one honest line about condition. The price and lot number come from the seller's words, never from the model.
 2. Buyers claim however they talk: "mine!!", "yo quiero la chaqueta 🙋‍♀️", "मुझे चाहिए 1", "2番ください", a raised hand. Clear claims are decided by keyword rules in milliseconds. Gemini reads only what the rules can't place, like slang, other scripts and "lol not mine, my sister wants it". All chat goes through one queue per show, so claims land in the order the server received them, whatever the model's latency. Translated replies run off that queue.
-3. The first claimer gets a clock (2:00 by default) and a PayPal button on their phone. Everyone else waits in line and hears back in their own language.
+3. The first claimer gets a clock (2:00 by default) and a PayPal button on their phone. Signing in to PayPal can take longer than a short clock, so a buyer who has opened checkout gets one extension, to 3 minutes. Everyone else waits in line and hears back in their own language.
 4. When a hold runs out without a captured payment, it passes to the next person in line. If the first buyer approves in PayPal after their time is up, Dibs refuses to capture, so they aren't charged for something that went to someone else. While PayPal is capturing, the hold is locked so the clock can't sell the same lot twice.
 5. PayPal confirms the sale. The money goes to the seller's own PayPal account if they gave one when starting the show.
 6. During the show the co-host watches the clocks. When a buyer has 30 seconds left it suggests a reminder in their language; when a lot comes back with nobody waiting it suggests relisting it 20% cheaper. After the show the seller can ask it things: "Wrap up the show", "Who hasn't paid?", "Refund 15 dollars on lot 1", "Lot 2 shipped, USPS 9400…". It reads the show and PayPal, then proposes actions (a refund, tracking, ending an unpaid hold, a reminder, a relist). Money and the line change only when the seller presses Confirm. A refund is re-checked at that moment against what Dibs has recorded as captured and already refunded for that lot, and it is sent with an idempotency key, so pressing Confirm again after a timeout can't refund twice. The seller can also let the co-host send pay reminders on its own; reminders move no money.
-7. Sellers already live on YouTube paste their stream link. Dibs reads the YouTube Live chat with the YouTube Data API, so claims there join the same queue. Each YouTube buyer gets a 4-digit claim code that only the seller sees; the buyer types it at the Dibs link to pay, so nobody can pay as someone else.
+7. Sellers already live on YouTube paste their stream link. Dibs reads the YouTube Live chat with the YouTube Data API, so claims there join the same queue. Each YouTube buyer gets a 4-digit claim code that only the seller sees in the studio. The seller reads it out or sends it by DM; the buyer opens the Dibs link, types the code and pays, so nobody can pay as someone else.
 
 ## PayPal in Dibs
 
 - Orders v2 through the PayPal TypeScript Server SDK (`@paypal/paypal-server-sdk`): one order per buyer with a line item per lot, `payee.email_address` set to the seller, and `PayPal-Request-Id` idempotency on create and capture. A repeated capture falls back to reading the order (`ORDER_ALREADY_CAPTURED`).
 - The claim clock gates capture. The server checks every claim in the order is still held by that buyer and returns 409 if not. While PayPal captures, the hold is locked. If the capture call times out, Dibs asks PayPal for the order before unlocking anything; a PENDING capture keeps the item reserved until the webhook settles it; and a capture PayPal confirms after the lot already moved on is never sold twice: the co-host suggests refunding it.
 - Webhooks register themselves on deploy and are checked with `/v1/notifications/verify-webhook-signature`. Unverified deliveries change nothing. Each event id is applied once. `PAYMENT.CAPTURE.COMPLETED` marks the sale, `PENDING` keeps it reserved, `DENIED` unlocks the hold, `REFUNDED` and `REVERSED` update the recap, and `CUSTOMER.DISPUTE.CREATED` shows up in the seller's feed.
-- PayPal Agent Toolkit gives the co-host order lookups, refund history and transaction search. The model is never given a tool that moves money. A confirmed refund goes to `POST /v2/payments/captures/{id}/refund` with `PayPal-Request-Id` set from the proposal, capped per lot at that lot's price minus earlier refunds and by what is left on the capture.
+- PayPal Agent Toolkit gives the co-host order lookups, refund history and transaction search. The model is never given a tool that moves money. When the seller confirms a refund, the server sends it, capped per lot at that lot's price minus earlier refunds and by what is left on the capture. The first refund (`38E52394V7107161L`, the one in the video) went through the Agent Toolkit's `create_refund`. Because that call can't carry an idempotency key, confirmed refunds now go to `POST /v2/payments/captures/{id}/refund` with `PayPal-Request-Id` set from the proposal, so a second Confirm after a timeout can't refund twice; the Toolkit call stays as the fallback.
 - Capture requests carry `PayPal-Request-Id` per attempt: a network retry is a no-op for PayPal, while a retry after a decline (the buyer picked another card) is a new capture.
 - Order tracking (`POST /v2/checkout/orders/{id}/track` with `notifyPayer`) when the seller confirms a tracking proposal.
 - Checkout buttons: PayPal, Venmo and Pay Later through the JS SDK.
@@ -81,6 +102,8 @@ flowchart LR
 
 The model never decides who gets an item and never moves money. Its output is validated with zod, and a low-confidence "claim" that the rules call chatter is treated as chatter.
 
+Judge mode's scripted viewers always say the same things, so their replies were translated ahead of time and checked by the same guard (`src/server/ai/demo-translations.json`). A slow free-tier call can't turn a judge's view back into English; your own messages still go to Gemini live.
+
 ## Evidence
 
 Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
@@ -95,13 +118,13 @@ Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
 
 Real YouTube Live sales, read on 11 November 2026 through Dibs' YouTube reader (public chat, read-only, no names kept):
 
-- Three live sales were running, including a fabric shop. Another seller had pinned "contact WhatsApp to place your order" in its chat, which is the manual process Dibs replaces.
+- These sellers were in India, where PayPal can't take domestic payments, so they are not Dibs' customers; their chat was used to test how Dibs reads real, mixed-language claims. Three live sales were running, including a fabric shop. Another seller had pinned "contact WhatsApp to place your order" in its chat, which is the manual process Dibs replaces.
 - In 40 consecutive messages from the fabric sale, buyers wrote in Hinglish: "hold rkh do booking meri confrm h" (keep it for me, I'm booking it), "kya rate h" (what's the price), "khadi me double bed ki dikha dijiye" (show me the double bed one in khadi). Three were claims and ten were questions, three of them about price.
 - Keyword rules alone first caught 3 claims and 2 questions. Gemini caught 8 questions, and those lines became new test cases for the rules, which now agree with Gemini on 32 of the 40.
 - Price questions were common enough that Dibs now answers them from the listing, in the buyer's language.
 - Replayed through the Dibs engine with one lot up, those 40 messages give 1 item held for the first claimer, 2 more buyers in line, and 3 price questions answered automatically.
 
-73 automated tests (`npm test`), across the domain, the HTTP server with a fake PayPal, and the YouTube reader with a fake YouTube API:
+75 automated tests (`npm test`; the video, recorded a day earlier, shows 71), across the domain, the HTTP server with a fake PayPal, and the YouTube reader with a fake YouTube API:
 
 - claims, the claim order, double claims, handles that collide
 - the clock: rollover, early release by the seller, no rollover in the middle of a capture
@@ -132,7 +155,7 @@ TypeScript runs in strict mode with `noUncheckedIndexedAccess`; CI type-checks, 
 - Video to buyers is a 5 fps JPEG stream over WebSocket, fine for showing items and not for long shows. WebRTC would replace it.
 - Shows live in memory on one server process; a restart ends them. A database comes before any real seller uses it.
 - The free Gemini tier is slow (1 to 2.5 s per call) and small. The rules handle the clear cases, so a show keeps working when the model is out of quota.
-- Sandbox only. Live payments would need each seller onboarded through PayPal's partner flow instead of an email address.
+- Sandbox only. Live payments would onboard each seller with PayPal Partner Referrals and send orders with `PayPal-Partner-Attribution-Id`, instead of naming the payee by email.
 
 ## Run it locally
 
@@ -161,6 +184,6 @@ test/                vitest: domain and HTTP
 
 ## Built with
 
-PayPal Orders v2, PayPal TypeScript Server SDK, PayPal Agent Toolkit, PayPal JS SDK, PayPal webhooks, Google Gemini, Fastify, React, Vite, TypeScript, Render.
+PayPal Orders v2, PayPal TypeScript Server SDK, PayPal Agent Toolkit, PayPal JS SDK (v5 buttons), PayPal webhooks, Google Gemini, Fastify, React, Vite, TypeScript, Render.
 
 Lot photos in judge mode are from Pexels (`web/public/demo/CREDITS.txt`). MIT license.
