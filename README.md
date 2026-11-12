@@ -15,7 +15,7 @@ Built for the PayPal AI Hackathon. Everything runs on the PayPal sandbox; no rea
 
 ![Judge mode after a full run: @jake let the bag's clock run out, it moved to @maya, and she paid through PayPal. Every reply went out in the buyer's language.](docs/judge-mode.jpg)
 
-*Judge mode after a full run, captured 12 Nov 2026 from a local run of this build against the PayPal sandbox: @jake let the bag's clock run out, it moved to @maya, and she paid (order `63321326B2768344N`, capture `8XH28654N1433314Y`). The hosted judge mode (link above) runs the same code and also receives PayPal's webhooks.*
+*Judge mode after a full run, captured 12 Nov 2026 from a local run of this build against the PayPal sandbox: @jake let the bag's clock run out, it moved to @maya, and she paid (order `1M43445888175192K`, capture `4LL559102D3980315`). The hosted judge mode (link above) runs the same code and also receives PayPal's webhooks.*
 
 ## The problem
 
@@ -117,7 +117,7 @@ Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
 | Capture | `55L4149684291294L`, COMPLETED. A second capture call returned the same result without a new charge. |
 | Co-host refund | Asked "refund 15 dollars on lot 1", the co-host proposed it and nothing moved. After Confirm: refund `38E52394V7107161L` of $15.00 on capture `2UY924655E8922244`, COMPLETED. |
 | Guard | Asked to refund $100 on the same lot, the proposal was refused in code ("Lot 1 can be refunded at most $25.00."), because $15 of its $40 had already gone back. |
-| Judge-mode run | @jake's hold on lot 3 lapsed, the lot moved to the next buyer, who paid $35: order `63321326B2768344N`, capture `8XH28654N1433314Y`, COMPLETED (12 Nov 2026). |
+| Judge-mode run | @jake's hold on lot 3 lapsed, the lot moved to the next buyer, who paid $35: order `1M43445888175192K`, capture `4LL559102D3980315`, COMPLETED (12 Nov 2026). |
 | Idempotent refund | Refund `2TG56374WK6010724` of $10.00 on capture `5CL163730A872210F`, sent with the proposal's request id; a second Confirm on the same proposal was refused. |
 
 Real YouTube Live sales, read on 11 November 2026 through Dibs' YouTube reader (public chat, read-only, no names kept):
