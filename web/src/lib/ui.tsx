@@ -135,8 +135,10 @@ export function PayButtons({ showId, token, holdingKey, onPaid, onError }: { sho
         createOrder: async () => (await api<{ orderId: string }>(`/api/shows/${showId}/checkout`, { token })).orderId,
         onApprove: async (data: { orderID: string }) => {
           try {
-            await api(`/api/shows/${showId}/capture`, { token, orderId: data.orderID });
-            cb.current.onPaid();
+            const res = await api<{ order?: { status?: string } }>(`/api/shows/${showId}/capture`, { token, orderId: data.orderID });
+            // PENDING (e.g. a bank payment) stays reserved until PayPal's webhook says it cleared
+            if (res.order?.status && res.order.status !== "captured") cb.current.onError("PayPal is still processing your payment. The item stays yours until it clears.");
+            else cb.current.onPaid();
           } catch (e) {
             cb.current.onError(e instanceof ApiError && e.status === 409 ? "Time ran out while you were paying, so the item went to the next person. You were not charged." : (e as Error).message);
           }

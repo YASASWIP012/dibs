@@ -135,7 +135,7 @@ export function Demo() {
 
 /** What PayPal returned for this show: real sandbox order and capture IDs, and each verified webhook. */
 function PayPalPanel({ show }: { show: NonNullable<ReturnType<typeof useShow>["show"]> }) {
-  const handle = (id: string) => show.buyers.find((b) => b.id === id)?.handle ?? "buyer";
+  const handle = (id: string) => show.buyers.find((b) => b.id === id)?.handle ?? show.claims.find((c) => c.buyerId === id)?.handle ?? "buyer";
   const hooks = show.chat.filter((m) => m.system && m.handle === "paypal");
   return (
     <section className="panel-card" aria-live="polite">
@@ -143,7 +143,7 @@ function PayPalPanel({ show }: { show: NonNullable<ReturnType<typeof useShow>["s
       <div className="panel-body" style={{ display: "grid", gap: 8 }}>
         {show.orders.map((o) => (
           <div key={o.id} className="holder" style={{ flexWrap: "wrap", gap: 8 }}>
-            <span className={`pill ${o.status === "captured" ? "pill--sold" : "pill--model"}`}>{o.status === "captured" ? "captured" : o.status}</span>
+            <span className={`pill ${o.status === "captured" ? "pill--sold" : "pill--model"}`}>{o.status === "captured" ? "captured" : o.status === "capturing" ? "pending at PayPal" : o.status}</span>
             <span className="grow">
               @{handle(o.buyerId)} · {money(o.total.cents)}
             </span>
