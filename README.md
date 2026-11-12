@@ -10,7 +10,7 @@ Built for the PayPal AI Hackathon. Everything runs on the PayPal sandbox; no rea
 |---|---|
 | Live app | https://dibs-1j5d.onrender.com |
 | Judge mode, no setup | https://dibs-1j5d.onrender.com/demo |
-| Demo video (2:43, subtitled) | {{VIDEO_URL}} |
+| Demo video (2:43, subtitled) | https://youtu.be/aTbgwYnOFBY |
 | API collection | [`postman/dibs.postman_collection.json`](postman/dibs.postman_collection.json) |
 
 ## The problem
