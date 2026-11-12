@@ -10,12 +10,12 @@ Built for the PayPal AI Hackathon. Everything runs on the PayPal sandbox; no rea
 
 **[▶ Watch the 2:43 demo](https://youtu.be/aTbgwYnOFBY)**
 
-[![A frame from the demo video: lot 1 held for @jake with two seconds left](docs/video-thumb.jpg)](https://youtu.be/aTbgwYnOFBY)
+[![Before and after: claims piling up in chat in several languages, then the claim board with all three lots paid through PayPal after moving down the line](docs/video-thumb.jpg)](https://youtu.be/aTbgwYnOFBY)
 
 | | |
 |---|---|
 | Live app | https://dibs-1j5d.onrender.com |
-| Judge mode, no setup | https://dibs-1j5d.onrender.com/demo |
+| Judge mode, no setup | https://dibs-1j5d.onrender.com/demo (free hosting: the first load after a quiet spell can take about 50 seconds) |
 | Demo video (2:43, subtitled) | https://youtu.be/aTbgwYnOFBY |
 | API collection | [`postman/dibs.postman_collection.json`](postman/dibs.postman_collection.json) |
 
