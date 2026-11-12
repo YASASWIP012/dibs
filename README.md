@@ -54,7 +54,7 @@ Who claimed first, a PayPal request, a deadline, and the next person in line: Di
 | PayPal sandbox orders, captures, refunds and webhooks, with the IDs listed under [Evidence](#evidence) | The show in the video and in judge mode: the seller and the other viewers are the builder and scripted bots |
 | Gemini reading chat, writing listings and translating replies. In judge mode it reads your own messages live; the scripted viewers' replies were translated ahead of time and checked by the same guard | |
 | YouTube Live chat read from real public sales | No seller has used Dibs yet |
-| Everything in the video's screens exists in the app; the screens were rebuilt for the video so they stay legible at video size | |
+| The video's screens were rebuilt so they stay legible at video size. What they show exists in the app, except the Venmo button drawn on one phone screen: the app renders PayPal and card buttons | |
 
 ## 60 seconds for judges
 
@@ -96,11 +96,10 @@ flowchart LR
 - PayPal Agent Toolkit gives the co-host order lookups, refund history and transaction search. The model is never given a tool that moves money. When the seller confirms a refund, the server sends it, capped per lot at that lot's price minus earlier refunds and by what is left on the capture. The first refund (`38E52394V7107161L`, the one in the video) went through the Agent Toolkit's `create_refund`. Because that call can't carry an idempotency key, confirmed refunds now go to `POST /v2/payments/captures/{id}/refund` with `PayPal-Request-Id` set from the proposal, so a second Confirm after a timeout can't refund twice; the Toolkit call stays as the fallback.
 - Capture requests carry `PayPal-Request-Id` per attempt: a network retry is a no-op for PayPal, while a retry after a decline (the buyer picked another card) is a new capture.
 - Order tracking (`POST /v2/checkout/orders/{id}/track` with `notifyPayer`) when the seller confirms a tracking proposal.
-- Checkout buttons: the PayPal and card buttons from the JS SDK v5.
 
 ## Gemini in Dibs
 
-On 40 real live-chat messages, keyword rules placed 5 of the 13 claims and questions on their own; Gemini read the other 8, all of them questions the rules missed. Rules keep the clock honest and fast, Gemini reads the way people actually type, and every reply it writes is checked before a buyer sees it.
+On 40 real live-chat messages there were 13 claims and questions. Gemini caught 8 of them that the keyword rules missed (all questions); the rules placed the other 5 on their own. Rules keep the clock honest and fast, Gemini reads the way people actually type, and every reply it writes is checked before a buyer sees it.
 
 | Job | Model | If the model is slow or out of quota |
 |---|---|---|
