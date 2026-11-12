@@ -33,6 +33,8 @@ export interface Claim {
   orderId?: string;
   /** Set while PayPal is capturing this claim's order, so the clock can't hand the lot on mid-capture. */
   capturing?: boolean;
+  /** Set once the buyer opened PayPal checkout; the clock got its one extension then. */
+  checkoutStartedAt?: number;
 }
 
 export interface Buyer {

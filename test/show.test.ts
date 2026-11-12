@@ -82,7 +82,7 @@ describe("checkout", () => {
     show.claim(jake.id, 14, "mine", "en");
     show.claim(maria.id, 14, "yo quiero", "es");
     show.recordOrder("ORDER-J", jake.id, show.payable(jake.id));
-    clock.advance(60_000);
+    clock.advance(60_000 + 180_000); // past the clock and the checkout grace
     show.tick();
     expect(() => show.assertCapturable("ORDER-J")).toThrow(/next person/);
   });
@@ -245,5 +245,20 @@ describe("refunds that time out", () => {
     expect(ids[0]).toBe(ids[1]);
     expect(show.orders.get("O-9")?.refundedCents).toBe(1000);
     expect((await cohost.confirm(show, p.id, act)).ok).toBe(false); // spent
+  });
+});
+
+describe("checkout grace", () => {
+  it("gives a buyer who opened PayPal checkout three minutes, once", () => {
+    const { show, jake } = setup();
+    show.claim(jake.id, 14, "mine", "en");
+    const held = show.holder(14)!;
+    const before = held.deadline!;
+    show.recordOrder("O-G", jake.id, show.payable(jake.id));
+    expect(held.deadline! - before).toBeGreaterThan(0);
+    expect(held.deadline! - held.checkoutStartedAt!).toBe(180_000);
+    const after = held.deadline!;
+    show.recordOrder("O-G2", jake.id, show.payable(jake.id));
+    expect(held.deadline).toBe(after);
   });
 });

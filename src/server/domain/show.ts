@@ -16,6 +16,9 @@ export interface ShowOptions {
   now?: () => number;
 }
 
+/** Time a buyer gets to finish PayPal once they've opened checkout. */
+export const CHECKOUT_GRACE_MS = 3 * 60_000;
+
 export class ShowError extends Error {
   constructor(
     readonly code:
@@ -300,7 +303,19 @@ export class Show {
       status: "created",
       createdAt: this.now(),
     };
-    for (const c of claims) c.orderId = orderId;
+    const at = this.now();
+    for (const c of claims) {
+      c.orderId = orderId;
+      // Signing in to PayPal takes longer than a short live-sale clock. A buyer who has opened
+      // checkout gets one extension, so a slow login doesn't hand their item to the next person.
+      if (c.status === "holding" && c.checkoutStartedAt === undefined) {
+        c.checkoutStartedAt = at;
+        if (c.deadline !== undefined && c.deadline < at + CHECKOUT_GRACE_MS) {
+          c.deadline = at + CHECKOUT_GRACE_MS;
+          this.emit({ type: "claim.holding", claim: c });
+        }
+      }
+    }
     this.orders.set(orderId, order);
     this.emit({ type: "order.created", order });
     return order;
