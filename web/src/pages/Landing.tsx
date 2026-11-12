@@ -53,7 +53,7 @@ function HeroVisual() {
               </div>
               <div className="stat">
                 <b className="t-mono">$40</b>
-                <span>saved by the line</span>
+                <span>paid after moving down the line</span>
               </div>
             </div>
             {lots.map((l) => (

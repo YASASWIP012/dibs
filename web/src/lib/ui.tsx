@@ -29,9 +29,9 @@ export function Countdown({ claim, now, holdMs }: { claim: Claim; now: number; h
   );
 }
 
-export function StatusPill({ lot }: { lot: Lot }) {
-  const label = { open: "Open", held: "Held", sold: "Paid", unsold: "Unsold" }[lot.status];
-  return <span className={`pill pill--${lot.status === "sold" ? "sold" : lot.status === "held" ? "held" : "open"}`}>{label}</span>;
+export function StatusPill({ lot, unpaid }: { lot: Lot; unpaid?: boolean }) {
+  const label = unpaid ? "Unpaid" : { open: "Open", held: "Held", sold: "Paid", unsold: "Unsold" }[lot.status];
+  return <span className={`pill pill--${lot.status === "sold" ? "sold" : lot.status === "held" || unpaid ? "held" : "open"}`}>{label}</span>;
 }
 
 export function LotCard({ lot, show, now, fresh }: { lot: Lot; show: Snapshot; now: number; fresh?: boolean }) {
@@ -39,13 +39,15 @@ export function LotCard({ lot, show, now, fresh }: { lot: Lot; show: Snapshot; n
   const holder = claims.find((c) => c.status === "holding" || c.status === "paid");
   const waiting = claims.filter((c) => c.status === "waiting");
   const lapsed = claims.filter((c) => c.status === "lapsed");
+  // everyone in line let their clock run out: the item is free again, ready to relist
+  const unpaid = !holder && waiting.length === 0 && lapsed.length > 0;
   return (
     <article className="lot" aria-label={`Lot ${lot.number}, ${lot.title}`}>
       {fresh ? <span className="lot__flash" aria-hidden="true" /> : null}
       <div className="lot__img">{lot.photo ? <img src={lot.photo} alt={lot.title} /> : <span>{lot.number}</span>}</div>
       <span className="lot__num">#{lot.number}</span>
       <span className="lot__status">
-        <StatusPill lot={lot} />
+        <StatusPill lot={lot} unpaid={unpaid} />
       </span>
       <div className="lot__body">
         <div className="lot__title">
@@ -60,7 +62,7 @@ export function LotCard({ lot, show, now, fresh }: { lot: Lot; show: Snapshot; n
             {holder.status === "paid" && <span className="pill pill--sold">Paid</span>}
           </div>
         ) : (
-          <p className="hint">No claims yet</p>
+          <p className="hint">{unpaid ? "Nobody in line paid in time. Back on the table to relist." : "No claims yet"}</p>
         )}
         {(waiting.length > 0 || lapsed.length > 0) && (
           <div className="queue" aria-label="Line">

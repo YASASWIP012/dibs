@@ -6,9 +6,16 @@ Dibs is for small resellers who sell on live video. It reads the chat, holds eac
 
 Built for the PayPal AI Hackathon. Everything runs on the PayPal sandbox; no real money moves.
 
+| | |
+|---|---|
+| Live app | https://dibs-1j5d.onrender.com |
+| Judge mode, no setup | https://dibs-1j5d.onrender.com/demo |
+| Demo video (2:43, subtitled) | https://youtu.be/aTbgwYnOFBY |
+| API collection | [`postman/dibs.postman_collection.json`](postman/dibs.postman_collection.json) |
+
 ![Judge mode after a full run: @jake let the bag's clock run out, it moved to @maya, and she paid through PayPal. Every reply went out in the buyer's language.](docs/judge-mode.jpg)
 
-*Judge mode after a full run, captured 12 Nov 2026 from a local run of this build against the PayPal sandbox: @jake let the bag's clock run out, it moved to @maya, and she paid (order `63321326B2768344N`, capture `8XH28654N1433314Y`). The hosted copy at the link above runs the same code and also receives PayPal's webhooks.*
+*Judge mode after a full run, captured 12 Nov 2026 from a local run of this build against the PayPal sandbox: @jake let the bag's clock run out, it moved to @maya, and she paid (order `63321326B2768344N`, capture `8XH28654N1433314Y`). The hosted judge mode (link above) runs the same code and also receives PayPal's webhooks.*
 
 ## The problem
 
@@ -76,6 +83,7 @@ flowchart LR
 
 ## PayPal in Dibs
 
+- Buyer checkout uses the PayPal JS SDK v5 buttons (the PayPal and card buttons in one render). Moving to JS SDK v6 needs a client-token endpoint and a one-time payment session; it's next on the list, and the server side would not change.
 - Orders v2 through the PayPal TypeScript Server SDK (`@paypal/paypal-server-sdk`): one order per buyer with a line item per lot, `payee.email_address` set to the seller, and `PayPal-Request-Id` idempotency on create and capture. A repeated capture falls back to reading the order (`ORDER_ALREADY_CAPTURED`).
 - The claim clock gates capture. The server checks every claim in the order is still held by that buyer and returns 409 if not. While PayPal captures, the hold is locked. If the capture call times out, Dibs asks PayPal for the order before unlocking anything; a PENDING capture keeps the item reserved until the webhook settles it; and a capture PayPal confirms after the lot already moved on is never sold twice: the co-host suggests refunding it.
 - Webhooks register themselves on deploy and are checked with `/v1/notifications/verify-webhook-signature`. Unverified deliveries change nothing. Each event id is applied once. `PAYMENT.CAPTURE.COMPLETED` marks the sale, `PENDING` keeps it reserved, `DENIED` unlocks the hold, `REFUNDED` and `REVERSED` update the recap, and `CUSTOMER.DISPUTE.CREATED` shows up in the seller's feed.
@@ -85,6 +93,8 @@ flowchart LR
 - Checkout buttons: PayPal, Venmo and Pay Later through the JS SDK.
 
 ## Gemini in Dibs
+
+On 40 real live-chat messages, keyword rules placed 5 of the 13 claims and questions on their own; Gemini read the other 8. Rules keep the clock honest and fast, Gemini reads the way people actually type, and every reply it writes is checked before a buyer sees it.
 
 | Job | Model | If the model is slow or out of quota |
 |---|---|---|
