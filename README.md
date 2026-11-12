@@ -19,9 +19,9 @@ Built for the PayPal AI Hackathon. Everything runs on the PayPal sandbox; no rea
 | Demo video (2:43, subtitled) | https://youtu.be/aTbgwYnOFBY |
 | API collection | [`postman/dibs.postman_collection.json`](postman/dibs.postman_collection.json) |
 
-![Judge mode after a full run: @jake let the bag's clock run out, it moved to @maya, and she paid through PayPal. Every reply went out in the buyer's language.](docs/judge-mode.jpg)
+![Judge mode after a full run: every lot sold to @maya after the buyers ahead of her let their clocks run out; $103 paid through PayPal in two orders.](docs/judge-mode.jpg)
 
-*Judge mode after a full run, captured 12 Nov 2026 from a local run of this build against the PayPal sandbox: @jake let the bag's clock run out, it moved to @maya, and she paid (order `1M43445888175192K`, capture `4LL559102D3980315`). The hosted judge mode (link above) runs the same code and also receives PayPal's webhooks.*
+*Judge mode after a full run, captured 12 Nov 2026 from a local run of this build against the PayPal sandbox. The judge joined as @maya and got in line for all three lots; each lot went to her after the bots ahead let their clocks run out. She paid lots 2 and 3 in one order ($63: order `3AL0533008814173K`, capture `6VB24906RS2573221`) and lot 1 later ($40: order `06300522MV939094K`, capture `9EF35739126826044`). The hosted judge mode (link above) runs the same code and also receives PayPal's webhooks.*
 
 ## The problem
 
@@ -52,7 +52,7 @@ Who claimed first, a PayPal request, a deadline, and the next person in line: Di
 | Real | Staged |
 |---|---|
 | PayPal sandbox orders, captures, refunds and webhooks, with the IDs listed under [Evidence](#evidence) | The show in the video and in judge mode: the seller and the other viewers are the builder and scripted bots |
-| Gemini reading chat, writing listings and translating replies, live in judge mode | |
+| Gemini reading chat, writing listings and translating replies. In judge mode it reads your own messages live; the scripted viewers' replies were translated ahead of time and checked by the same guard | |
 | YouTube Live chat read from real public sales | No seller has used Dibs yet |
 | Everything in the video's screens exists in the app; the screens were rebuilt for the video so they stay legible at video size | |
 
@@ -96,11 +96,11 @@ flowchart LR
 - PayPal Agent Toolkit gives the co-host order lookups, refund history and transaction search. The model is never given a tool that moves money. When the seller confirms a refund, the server sends it, capped per lot at that lot's price minus earlier refunds and by what is left on the capture. The first refund (`38E52394V7107161L`, the one in the video) went through the Agent Toolkit's `create_refund`. Because that call can't carry an idempotency key, confirmed refunds now go to `POST /v2/payments/captures/{id}/refund` with `PayPal-Request-Id` set from the proposal, so a second Confirm after a timeout can't refund twice; the Toolkit call stays as the fallback.
 - Capture requests carry `PayPal-Request-Id` per attempt: a network retry is a no-op for PayPal, while a retry after a decline (the buyer picked another card) is a new capture.
 - Order tracking (`POST /v2/checkout/orders/{id}/track` with `notifyPayer`) when the seller confirms a tracking proposal.
-- Checkout buttons: PayPal, Venmo and Pay Later through the JS SDK.
+- Checkout buttons: the PayPal and card buttons from the JS SDK v5.
 
 ## Gemini in Dibs
 
-On 40 real live-chat messages, keyword rules placed 5 of the 13 claims and questions on their own; Gemini read the other 8. Rules keep the clock honest and fast, Gemini reads the way people actually type, and every reply it writes is checked before a buyer sees it.
+On 40 real live-chat messages, keyword rules placed 5 of the 13 claims and questions on their own; Gemini read the other 8, all of them questions the rules missed. Rules keep the clock honest and fast, Gemini reads the way people actually type, and every reply it writes is checked before a buyer sees it.
 
 | Job | Model | If the model is slow or out of quota |
 |---|---|---|
@@ -123,7 +123,7 @@ Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
 | Capture | `55L4149684291294L`, COMPLETED. A second capture call returned the same result without a new charge. |
 | Co-host refund | Asked "refund 15 dollars on lot 1", the co-host proposed it and nothing moved. After Confirm: refund `38E52394V7107161L` of $15.00 on capture `2UY924655E8922244`, COMPLETED. |
 | Guard | Asked to refund $100 on the same lot, the proposal was refused in code ("Lot 1 can be refunded at most $25.00."), because $15 of its $40 had already gone back. |
-| Judge-mode run | @jake's hold on lot 3 lapsed, the lot moved to the next buyer, who paid $35: order `1M43445888175192K`, capture `4LL559102D3980315`, COMPLETED (12 Nov 2026). |
+| Judge-mode run | Every lot rolled past buyers who didn't pay and went to the judge's buyer, who paid $103 in two orders: `3AL0533008814173K` / capture `6VB24906RS2573221` ($63, two lots in one order) and `06300522MV939094K` / capture `9EF35739126826044` ($40). PayPal sent `PAYMENT.CAPTURE.COMPLETED` for both (`WH-9H346912UL855654V-0PS66620JJ3493646`, `WH-1H634945J67881015-35S73870XG061543D`). 12 Nov 2026. |
 | Verified webhook | PayPal delivered `PAYMENT.CAPTURE.COMPLETED` event `WH-98S25606W97563605-50G69523LK7423726` for capture `4LL559102D3980315` to the hosted endpoint, which answered 200 after `verify-webhook-signature` (it answers 400 when verification fails). That show ran on a local copy, so the hosted server verified the event and found no show of its own to update. |
 | Idempotent refund | Refund `2TG56374WK6010724` of $10.00 on capture `5CL163730A872210F`, sent with the proposal's request id; a second Confirm on the same proposal was refused. |
 

@@ -59,7 +59,7 @@ export function Demo() {
           <Logo /> Dibs
         </a>
         <span className="pill pill--open">Judge mode</span>
-        <span className="hint">A scripted show on the real engine. The other viewers are bots; PayPal and Gemini are live. Holds last 0:40 here so you see a rollover quickly (real shows default to 2:00).</span>
+        <span className="hint">A scripted show on the real engine. The other viewers are bots with pre-translated replies; PayPal is live, and Gemini reads what you type. Holds last 0:40 here so you see a rollover quickly (real shows default to 2:00).</span>
         <span className="spacer" />
         <button className="btn btn-outline btn-sm" onClick={() => location.reload()}>
           Restart
