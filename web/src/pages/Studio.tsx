@@ -464,7 +464,7 @@ export function Recap({ show }: { show: ReturnType<typeof useShow>["show"] }) {
       </div>
       <div className="stat">
         <b className="t-mono">{money(r.rescuedCents)}</b>
-        <span>saved by the line ({r.rescued})</span>
+        <span>paid after moving down the line ({r.rescued})</span>
       </div>
       <div className="stat">
         <b>{r.waiting}</b>

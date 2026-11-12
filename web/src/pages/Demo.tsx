@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../lib/api";
+import { api, money } from "../lib/api";
 import { useShow } from "../lib/useShow";
 import { LotCard, Logo } from "../lib/ui";
 import { ChatPanel, Recap } from "./Studio";
@@ -21,6 +21,12 @@ export function Demo() {
   const { show, now } = live;
 
   useEffect(() => {
+    // ?watch=<id> opens a judge-mode show that is already running (to share or screenshot it)
+    const watch = new URLSearchParams(location.search).get("watch");
+    if (watch && /^[\w-]{4,40}$/.test(watch)) {
+      setShowId(watch);
+      return;
+    }
     api<{ showId: string; demoBuyer: Config["demoBuyer"] }>("/api/demo", {}).then((r) => {
       setShowId(r.showId);
       setCfg({ paypalClientId: null, demoBuyer: r.demoBuyer });
@@ -53,7 +59,7 @@ export function Demo() {
           <Logo /> Dibs
         </a>
         <span className="pill pill--open">Judge mode</span>
-        <span className="hint">A scripted show on the real engine. The other viewers are bots; PayPal and Gemini are live.</span>
+        <span className="hint">A scripted show on the real engine. The other viewers are bots; PayPal and Gemini are live. Holds last 0:40 here so you see a rollover quickly (real shows default to 2:00).</span>
         <span className="spacer" />
         <button className="btn btn-outline btn-sm" onClick={() => location.reload()}>
           Restart
@@ -79,6 +85,7 @@ export function Demo() {
             </div>
           </section>
           <ChatPanel show={show} />
+          {show && show.orders.length > 0 && <PayPalPanel show={show} />}
           {live.suggestions.length > 0 && (
             <section className="panel-card" aria-live="polite">
               <div className="panel-head">Co-host, working the show (reminders go out on their own; money waits for the seller)</div>
@@ -106,7 +113,7 @@ export function Demo() {
               </ol>
               {cfg?.demoBuyer ? (
                 <div className="creds" aria-label="Sandbox buyer login">
-                  PayPal sandbox buyer
+                  PayPal sandbox test buyer (sandbox only, no real money)
                   <br />
                   {cfg.demoBuyer.email}
                   <br />
@@ -123,5 +130,34 @@ export function Demo() {
         </aside>
       </main>
     </div>
+  );
+}
+
+/** What PayPal returned for this show: real sandbox order and capture IDs, and each verified webhook. */
+function PayPalPanel({ show }: { show: NonNullable<ReturnType<typeof useShow>["show"]> }) {
+  const handle = (id: string) => show.buyers.find((b) => b.id === id)?.handle ?? "buyer";
+  const hooks = show.chat.filter((m) => m.system && m.handle === "paypal");
+  return (
+    <section className="panel-card" aria-live="polite">
+      <div className="panel-head">PayPal, this show (sandbox)</div>
+      <div className="panel-body" style={{ display: "grid", gap: 8 }}>
+        {show.orders.map((o) => (
+          <div key={o.id} className="holder" style={{ flexWrap: "wrap", gap: 8 }}>
+            <span className={`pill ${o.status === "captured" ? "pill--sold" : "pill--model"}`}>{o.status === "captured" ? "captured" : o.status}</span>
+            <span className="grow">
+              @{handle(o.buyerId)} · {money(o.total.cents)}
+            </span>
+            <span className="t-mono t-small">order {o.id}</span>
+            {o.captureId && <span className="t-mono t-small">capture {o.captureId}</span>}
+          </div>
+        ))}
+        {hooks.slice(-4).map((m) => (
+          <div key={m.id} className="holder">
+            <span className="pill pill--sold">webhook</span>
+            <span className="grow t-mono t-small">{m.text}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
