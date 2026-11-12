@@ -6,6 +6,12 @@ Dibs is for small resellers who sell on live video. It reads the chat, holds eac
 
 Built for the PayPal AI Hackathon. Everything runs on the PayPal sandbox; no real money moves.
 
+@jake types "mine" and never pays. When his clock runs out (40 seconds in judge mode, 2 minutes by default), the item goes to the next person in line, who is told in their own language and pays through PayPal while the show keeps going.
+
+**[▶ Watch the 2:43 demo](https://youtu.be/aTbgwYnOFBY)**
+
+[![A frame from the demo video: lot 1 held for @jake with two seconds left](docs/video-thumb.jpg)](https://youtu.be/aTbgwYnOFBY)
+
 | | |
 |---|---|
 | Live app | https://dibs-1j5d.onrender.com |
@@ -118,6 +124,7 @@ Real sandbox runs on 11 November 2026, through Dibs' own endpoints:
 | Co-host refund | Asked "refund 15 dollars on lot 1", the co-host proposed it and nothing moved. After Confirm: refund `38E52394V7107161L` of $15.00 on capture `2UY924655E8922244`, COMPLETED. |
 | Guard | Asked to refund $100 on the same lot, the proposal was refused in code ("Lot 1 can be refunded at most $25.00."), because $15 of its $40 had already gone back. |
 | Judge-mode run | @jake's hold on lot 3 lapsed, the lot moved to the next buyer, who paid $35: order `1M43445888175192K`, capture `4LL559102D3980315`, COMPLETED (12 Nov 2026). |
+| Verified webhook | PayPal delivered `PAYMENT.CAPTURE.COMPLETED` event `WH-98S25606W97563605-50G69523LK7423726` for capture `4LL559102D3980315` to the hosted endpoint, which answered 200 after `verify-webhook-signature` (it answers 400 when verification fails). That show ran on a local copy, so the hosted server verified the event and found no show of its own to update. |
 | Idempotent refund | Refund `2TG56374WK6010724` of $10.00 on capture `5CL163730A872210F`, sent with the proposal's request id; a second Confirm on the same proposal was refused. |
 
 Real YouTube Live sales, read on 11 November 2026 through Dibs' YouTube reader (public chat, read-only, no names kept):
