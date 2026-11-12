@@ -1,8 +1,9 @@
-# Free Render instances sleep after 15 idle minutes. Judges should never wait for a cold start.
+# Free Render instances sleep after 15 idle minutes. This keeps the demo awake 5am to 9pm US Pacific,
+# when judges are most likely to open it, and stays inside the free plan's monthly hours.
 name: keepalive
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/10 13-23,0-4 * * *"
   workflow_dispatch:
 jobs:
   ping:
